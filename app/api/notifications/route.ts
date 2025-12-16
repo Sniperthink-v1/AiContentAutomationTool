@@ -64,15 +64,29 @@ export async function GET(request: NextRequest) {
 // Helper function to get relative time
 function getRelativeTime(date: Date): string {
   const now = new Date()
-  const diffMs = now.getTime() - new Date(date).getTime()
+  const notificationDate = new Date(date)
+  const diffMs = now.getTime() - notificationDate.getTime()
   const diffSecs = Math.floor(diffMs / 1000)
   const diffMins = Math.floor(diffSecs / 60)
   const diffHours = Math.floor(diffMins / 60)
   const diffDays = Math.floor(diffHours / 24)
+  const diffWeeks = Math.floor(diffDays / 7)
+  const diffMonths = Math.floor(diffDays / 30)
 
   if (diffSecs < 60) return 'Just now'
-  if (diffMins < 60) return `${diffMins} min ago`
+  if (diffMins < 60) return `${diffMins} min${diffMins > 1 ? 's' : ''} ago`
   if (diffHours < 24) return `${diffHours} hour${diffHours > 1 ? 's' : ''} ago`
-  if (diffDays < 7) return `${diffDays} day${diffDays > 1 ? 's' : ''} ago`
-  return new Date(date).toLocaleDateString()
+  if (diffDays === 1) return 'Yesterday'
+  if (diffDays < 7) return `${diffDays} days ago`
+  if (diffWeeks === 1) return '1 week ago'
+  if (diffWeeks < 4) return `${diffWeeks} weeks ago`
+  if (diffMonths === 1) return '1 month ago'
+  if (diffMonths < 12) return `${diffMonths} months ago`
+  
+  // Format as readable date for older notifications
+  return notificationDate.toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: notificationDate.getFullYear() !== now.getFullYear() ? 'numeric' : undefined
+  })
 }

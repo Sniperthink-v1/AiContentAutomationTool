@@ -355,16 +355,20 @@ function DashboardLayoutInner({
                     </div>
 
                     {/* Footer */}
-                    {notifications.length > 0 && unreadCount > 0 && (
-                      <div className="px-4 py-2 border-t border-blue-500/15 bg-[#08080c]">
+                    <div className="px-4 py-2 border-t border-blue-500/15 bg-[#08080c]">
+                      {notifications.length > 0 && unreadCount > 0 ? (
                         <button 
                           onClick={markAllAsRead}
                           className="w-full text-center text-xs text-blue-400 hover:text-blue-300 font-medium py-1.5 rounded-lg hover:bg-blue-500/10 transition-all duration-200 flex items-center justify-center gap-1.5"
                         >
                           <Check className="w-3 h-3" /> Mark all as read
                         </button>
-                      </div>
-                    )}
+                      ) : notifications.length > 0 ? (
+                        <p className="text-center text-xs text-gray-500 py-1.5">
+                          All caught up! ✓
+                        </p>
+                      ) : null}
+                    </div>
                   </div>
                 )}
               </div>

@@ -48,8 +48,12 @@ export async function GET(request: NextRequest) {
     const igUserId = await getInstagramBusinessAccount(longLivedToken.access_token);
     
     if (!igUserId) {
+      // More specific error message
+      const errorMsg = encodeURIComponent(
+        'No Instagram Business account found. This usually means: (1) You need to link your Instagram account to your Facebook Page in Instagram Settings > Account > Linked accounts, OR (2) You declined the "pages_show_list" permission during login. Please try again and accept ALL permissions.'
+      );
       return NextResponse.redirect(
-        new URL('/dashboard/settings?error=No Instagram Business account found. Please connect a Facebook Page to your Instagram account.', request.url)
+        new URL(`/dashboard/settings?error=${errorMsg}`, request.url)
       );
     }
 

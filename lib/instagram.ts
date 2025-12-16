@@ -60,6 +60,8 @@ export function getInstagramAuthUrl(): string {
     'instagram_manage_insights',
     'pages_show_list',
     'pages_read_engagement',
+    'pages_manage_metadata',
+    'business_management',
   ].join(',');
 
   const authUrl = `https://www.facebook.com/${GRAPH_API_VERSION}/dialog/oauth?` +
