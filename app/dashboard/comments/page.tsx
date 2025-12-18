@@ -1,0 +1,580 @@
+'use client'
+
+import { useState, useEffect } from 'react'
+import { 
+  MessageCircle,
+  Send,
+  Trash2,
+  Loader2,
+  Image as ImageIcon,
+  Video,
+  RefreshCw,
+  User,
+  Clock,
+  Heart,
+  Reply,
+  ChevronDown,
+  ChevronUp,
+  AlertCircle,
+  CheckCircle,
+  Search,
+  Filter,
+  MoreHorizontal,
+  ExternalLink
+} from 'lucide-react'
+import { useToast } from '@/lib/components/Toast'
+
+interface Comment {
+  id: string
+  text: string
+  username: string
+  timestamp: string
+  replies?: Comment[]
+}
+
+interface Media {
+  id: string
+  caption?: string
+  media_type: 'IMAGE' | 'VIDEO' | 'CAROUSEL_ALBUM' | 'REELS'
+  media_url: string
+  thumbnail_url?: string
+  permalink: string
+  timestamp: string
+  like_count?: number
+  comments_count?: number
+}
+
+export default function CommentsPage() {
+  const { showToast, ToastContainer } = useToast()
+  const [media, setMedia] = useState<Media[]>([])
+  const [selectedMedia, setSelectedMedia] = useState<Media | null>(null)
+  const [comments, setComments] = useState<Comment[]>([])
+  const [isLoadingMedia, setIsLoadingMedia] = useState(true)
+  const [isLoadingComments, setIsLoadingComments] = useState(false)
+  const [replyingTo, setReplyingTo] = useState<string | null>(null)
+  const [replyText, setReplyText] = useState('')
+  const [isSendingReply, setIsSendingReply] = useState(false)
+  const [expandedComments, setExpandedComments] = useState<Set<string>>(new Set())
+  const [searchQuery, setSearchQuery] = useState('')
+  const [filterType, setFilterType] = useState<'all' | 'IMAGE' | 'VIDEO' | 'REELS'>('all')
+  const [isConnected, setIsConnected] = useState(true)
+
+  // Fetch user's media on mount
+  useEffect(() => {
+    fetchMedia()
+  }, [])
+
+  const fetchMedia = async () => {
+    setIsLoadingMedia(true)
+    try {
+      const response = await fetch('/api/comments/media?limit=50')
+      const data = await response.json()
+      
+      if (!response.ok) {
+        if (response.status === 401) {
+          setIsConnected(false)
+        }
+        throw new Error(data.error || 'Failed to fetch media')
+      }
+      
+      setMedia(data.media || [])
+      setIsConnected(true)
+    } catch (error) {
+      console.error('Error fetching media:', error)
+      if ((error as Error).message.includes('not connected')) {
+        setIsConnected(false)
+      }
+    } finally {
+      setIsLoadingMedia(false)
+    }
+  }
+
+  const fetchComments = async (mediaId: string) => {
+    setIsLoadingComments(true)
+    try {
+      const response = await fetch(`/api/comments?mediaId=${mediaId}`)
+      const data = await response.json()
+      
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to fetch comments')
+      }
+      
+      setComments(data.comments || [])
+    } catch (error) {
+      console.error('Error fetching comments:', error)
+      showToast('Failed to load comments', 'error')
+    } finally {
+      setIsLoadingComments(false)
+    }
+  }
+
+  const handleSelectMedia = (mediaItem: Media) => {
+    setSelectedMedia(mediaItem)
+    setComments([])
+    fetchComments(mediaItem.id)
+  }
+
+  const handleReply = async (commentId: string) => {
+    if (!replyText.trim()) {
+      showToast('Please enter a reply message', 'error')
+      return
+    }
+
+    setIsSendingReply(true)
+    try {
+      const response = await fetch('/api/comments', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          commentId,
+          message: replyText
+        })
+      })
+
+      const data = await response.json()
+      
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to send reply')
+      }
+
+      showToast('Reply sent successfully!', 'success')
+      setReplyText('')
+      setReplyingTo(null)
+      
+      // Refresh comments
+      if (selectedMedia) {
+        fetchComments(selectedMedia.id)
+      }
+    } catch (error) {
+      console.error('Error sending reply:', error)
+      showToast('Failed to send reply', 'error')
+    } finally {
+      setIsSendingReply(false)
+    }
+  }
+
+  const handleDeleteComment = async (commentId: string) => {
+    if (!confirm('Are you sure you want to delete this comment?')) return
+
+    try {
+      const response = await fetch(`/api/comments?commentId=${commentId}`, {
+        method: 'DELETE'
+      })
+
+      const data = await response.json()
+      
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to delete comment')
+      }
+
+      showToast('Comment deleted successfully', 'success')
+      
+      // Refresh comments
+      if (selectedMedia) {
+        fetchComments(selectedMedia.id)
+      }
+    } catch (error) {
+      console.error('Error deleting comment:', error)
+      showToast('Failed to delete comment', 'error')
+    }
+  }
+
+  const toggleCommentExpand = (commentId: string) => {
+    setExpandedComments(prev => {
+      const newSet = new Set(prev)
+      if (newSet.has(commentId)) {
+        newSet.delete(commentId)
+      } else {
+        newSet.add(commentId)
+      }
+      return newSet
+    })
+  }
+
+  const formatDate = (timestamp: string) => {
+    const date = new Date(timestamp)
+    const now = new Date()
+    const diffMs = now.getTime() - date.getTime()
+    const diffHours = Math.floor(diffMs / (1000 * 60 * 60))
+    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24))
+
+    if (diffHours < 1) return 'Just now'
+    if (diffHours < 24) return `${diffHours}h ago`
+    if (diffDays < 7) return `${diffDays}d ago`
+    return date.toLocaleDateString()
+  }
+
+  const getMediaIcon = (type: string) => {
+    switch (type) {
+      case 'VIDEO':
+      case 'REELS':
+        return <Video className="w-4 h-4" />
+      default:
+        return <ImageIcon className="w-4 h-4" />
+    }
+  }
+
+  const filteredMedia = media.filter(item => {
+    const matchesSearch = item.caption?.toLowerCase().includes(searchQuery.toLowerCase()) || true
+    const matchesType = filterType === 'all' || item.media_type === filterType
+    return matchesSearch && matchesType
+  })
+
+  if (!isConnected) {
+    return (
+      <div className="space-y-6 animate-fade-in">
+        <ToastContainer />
+        <div className="animate-slide-down">
+          <h1 className="text-3xl font-bold text-foreground">Comments & Replies</h1>
+          <p className="text-foreground-secondary mt-1">Manage your Instagram comments and engage with your audience</p>
+        </div>
+        
+        <div className="card p-12 text-center">
+          <AlertCircle className="w-16 h-16 text-yellow-500 mx-auto mb-4" />
+          <h2 className="text-xl font-bold text-foreground mb-2">Instagram Not Connected</h2>
+          <p className="text-foreground-secondary mb-6">
+            Connect your Instagram account to manage comments and replies.
+          </p>
+          <a 
+            href="/dashboard/settings"
+            className="btn-primary inline-flex items-center gap-2"
+          >
+            Go to Settings
+            <ExternalLink className="w-4 h-4" />
+          </a>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-6 animate-fade-in">
+      <ToastContainer />
+
+      {/* Header */}
+      <div className="animate-slide-down">
+        <h1 className="text-3xl font-bold text-foreground">Comments & Replies</h1>
+        <p className="text-foreground-secondary mt-1">Manage your Instagram comments and engage with your audience</p>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Left Column - Media List */}
+        <div className="lg:col-span-1 space-y-4">
+          <div className="card p-4">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-semibold text-foreground flex items-center gap-2">
+                <ImageIcon className="w-5 h-5 text-primary" />
+                Your Posts
+              </h2>
+              <button
+                onClick={fetchMedia}
+                className="p-2 text-foreground-secondary hover:text-foreground hover:bg-background-tertiary rounded-lg transition-colors"
+                title="Refresh"
+              >
+                <RefreshCw className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Search & Filter */}
+            <div className="space-y-3 mb-4">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-foreground-muted" />
+                <input
+                  type="text"
+                  placeholder="Search posts..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full pl-10 pr-4 py-2 bg-background border border-border rounded-lg text-sm text-foreground placeholder:text-foreground-muted focus:outline-none focus:ring-2 focus:ring-primary/50"
+                />
+              </div>
+              <div className="flex gap-2">
+                {(['all', 'IMAGE', 'VIDEO', 'REELS'] as const).map((type) => (
+                  <button
+                    key={type}
+                    onClick={() => setFilterType(type)}
+                    className={`px-3 py-1 text-xs rounded-full transition-colors ${
+                      filterType === type
+                        ? 'bg-primary text-white'
+                        : 'bg-background-secondary text-foreground-secondary hover:bg-background-tertiary'
+                    }`}
+                  >
+                    {type === 'all' ? 'All' : type}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Media List */}
+            {isLoadingMedia ? (
+              <div className="flex items-center justify-center py-12">
+                <Loader2 className="w-8 h-8 animate-spin text-primary" />
+              </div>
+            ) : filteredMedia.length === 0 ? (
+              <div className="text-center py-8">
+                <ImageIcon className="w-12 h-12 text-foreground-muted mx-auto mb-3" />
+                <p className="text-foreground-secondary">No posts found</p>
+              </div>
+            ) : (
+              <div className="space-y-2 max-h-[600px] overflow-y-auto">
+                {filteredMedia.map((item) => (
+                  <button
+                    key={item.id}
+                    onClick={() => handleSelectMedia(item)}
+                    className={`w-full p-3 rounded-lg border transition-all text-left ${
+                      selectedMedia?.id === item.id
+                        ? 'border-primary bg-primary/10'
+                        : 'border-border hover:border-primary/50 bg-background-secondary'
+                    }`}
+                  >
+                    <div className="flex gap-3">
+                      <div className="relative w-16 h-16 rounded-lg overflow-hidden bg-background-tertiary flex-shrink-0">
+                        <img
+                          src={item.thumbnail_url || item.media_url}
+                          alt=""
+                          className="w-full h-full object-cover"
+                          onError={(e) => {
+                            (e.target as HTMLImageElement).src = '/placeholder.png'
+                          }}
+                        />
+                        <div className="absolute top-1 right-1 p-1 bg-black/60 rounded text-white">
+                          {getMediaIcon(item.media_type)}
+                        </div>
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm text-foreground line-clamp-2">
+                          {item.caption || 'No caption'}
+                        </p>
+                        <div className="flex items-center gap-3 mt-2 text-xs text-foreground-secondary">
+                          <span className="flex items-center gap-1">
+                            <Heart className="w-3 h-3" />
+                            {item.like_count || 0}
+                          </span>
+                          <span className="flex items-center gap-1">
+                            <MessageCircle className="w-3 h-3" />
+                            {item.comments_count || 0}
+                          </span>
+                          <span className="flex items-center gap-1">
+                            <Clock className="w-3 h-3" />
+                            {formatDate(item.timestamp)}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Right Column - Comments */}
+        <div className="lg:col-span-2">
+          <div className="card p-6 min-h-[600px]">
+            {!selectedMedia ? (
+              <div className="flex flex-col items-center justify-center h-full py-12">
+                <MessageCircle className="w-16 h-16 text-foreground-muted mb-4" />
+                <h3 className="text-lg font-semibold text-foreground mb-2">Select a Post</h3>
+                <p className="text-foreground-secondary text-center max-w-md">
+                  Choose a post from the left to view and manage its comments. You can reply to comments and engage with your audience.
+                </p>
+              </div>
+            ) : (
+              <>
+                {/* Selected Media Header */}
+                <div className="flex items-start gap-4 pb-4 border-b border-border mb-4">
+                  <div className="w-20 h-20 rounded-lg overflow-hidden bg-background-tertiary flex-shrink-0">
+                    <img
+                      src={selectedMedia.thumbnail_url || selectedMedia.media_url}
+                      alt=""
+                      className="w-full h-full object-cover"
+                    />
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-foreground line-clamp-2 mb-2">
+                      {selectedMedia.caption || 'No caption'}
+                    </p>
+                    <div className="flex items-center gap-4 text-sm text-foreground-secondary">
+                      <span className="flex items-center gap-1">
+                        <Heart className="w-4 h-4" />
+                        {selectedMedia.like_count || 0} likes
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <MessageCircle className="w-4 h-4" />
+                        {selectedMedia.comments_count || 0} comments
+                      </span>
+                      <a
+                        href={selectedMedia.permalink}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center gap-1 text-primary hover:underline"
+                      >
+                        <ExternalLink className="w-4 h-4" />
+                        View on Instagram
+                      </a>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => fetchComments(selectedMedia.id)}
+                    className="p-2 text-foreground-secondary hover:text-foreground hover:bg-background-tertiary rounded-lg transition-colors"
+                    title="Refresh comments"
+                  >
+                    <RefreshCw className="w-4 h-4" />
+                  </button>
+                </div>
+
+                {/* Comments List */}
+                <div className="space-y-4">
+                  <h3 className="text-lg font-semibold text-foreground flex items-center gap-2">
+                    <MessageCircle className="w-5 h-5 text-primary" />
+                    Comments ({comments.length})
+                  </h3>
+
+                  {isLoadingComments ? (
+                    <div className="flex items-center justify-center py-12">
+                      <Loader2 className="w-8 h-8 animate-spin text-primary" />
+                    </div>
+                  ) : comments.length === 0 ? (
+                    <div className="text-center py-12">
+                      <MessageCircle className="w-12 h-12 text-foreground-muted mx-auto mb-3" />
+                      <p className="text-foreground-secondary">No comments yet</p>
+                      <p className="text-sm text-foreground-muted mt-1">
+                        Comments on this post will appear here
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="space-y-4 max-h-[400px] overflow-y-auto">
+                      {comments.map((comment) => (
+                        <div
+                          key={comment.id}
+                          className="p-4 bg-background-secondary rounded-lg border border-border"
+                        >
+                          <div className="flex items-start gap-3">
+                            <div className="w-10 h-10 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center text-white font-semibold flex-shrink-0">
+                              {comment.username.charAt(0).toUpperCase()}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2 mb-1">
+                                <span className="font-semibold text-foreground">
+                                  @{comment.username}
+                                </span>
+                                <span className="text-xs text-foreground-muted">
+                                  {formatDate(comment.timestamp)}
+                                </span>
+                              </div>
+                              <p className="text-foreground">{comment.text}</p>
+                              
+                              {/* Action Buttons */}
+                              <div className="flex items-center gap-2 mt-3">
+                                <button
+                                  onClick={() => setReplyingTo(replyingTo === comment.id ? null : comment.id)}
+                                  className="flex items-center gap-1 px-3 py-1.5 text-sm text-foreground-secondary hover:text-primary hover:bg-primary/10 rounded-lg transition-colors"
+                                >
+                                  <Reply className="w-4 h-4" />
+                                  Reply
+                                </button>
+                                <button
+                                  onClick={() => handleDeleteComment(comment.id)}
+                                  className="flex items-center gap-1 px-3 py-1.5 text-sm text-foreground-secondary hover:text-red-500 hover:bg-red-500/10 rounded-lg transition-colors"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                  Delete
+                                </button>
+                              </div>
+
+                              {/* Reply Input */}
+                              {replyingTo === comment.id && (
+                                <div className="mt-3 p-3 bg-background rounded-lg border border-border">
+                                  <div className="flex items-center gap-2 text-sm text-foreground-secondary mb-2">
+                                    <Reply className="w-4 h-4" />
+                                    Replying to @{comment.username}
+                                  </div>
+                                  <div className="flex gap-2">
+                                    <input
+                                      type="text"
+                                      value={replyText}
+                                      onChange={(e) => setReplyText(e.target.value)}
+                                      placeholder="Write a reply..."
+                                      className="flex-1 px-4 py-2 bg-background-secondary border border-border rounded-lg text-foreground placeholder:text-foreground-muted focus:outline-none focus:ring-2 focus:ring-primary/50"
+                                      onKeyDown={(e) => {
+                                        if (e.key === 'Enter' && !e.shiftKey) {
+                                          e.preventDefault()
+                                          handleReply(comment.id)
+                                        }
+                                      }}
+                                    />
+                                    <button
+                                      onClick={() => handleReply(comment.id)}
+                                      disabled={!replyText.trim() || isSendingReply}
+                                      className="btn-primary px-4 disabled:opacity-50"
+                                    >
+                                      {isSendingReply ? (
+                                        <Loader2 className="w-5 h-5 animate-spin" />
+                                      ) : (
+                                        <Send className="w-5 h-5" />
+                                      )}
+                                    </button>
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* Replies (if any) */}
+                              {comment.replies && comment.replies.length > 0 && (
+                                <div className="mt-3 pl-4 border-l-2 border-border space-y-3">
+                                  {comment.replies.map((reply) => (
+                                    <div key={reply.id} className="p-2">
+                                      <div className="flex items-center gap-2 mb-1">
+                                        <span className="font-semibold text-sm text-foreground">
+                                          @{reply.username}
+                                        </span>
+                                        <span className="text-xs text-foreground-muted">
+                                          {formatDate(reply.timestamp)}
+                                        </span>
+                                      </div>
+                                      <p className="text-sm text-foreground">{reply.text}</p>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Quick Tips Card */}
+      <div className="card p-6">
+        <h3 className="text-lg font-semibold text-foreground mb-4 flex items-center gap-2">
+          <CheckCircle className="w-5 h-5 text-green-500" />
+          Tips for Engaging with Comments
+        </h3>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="p-4 bg-background-secondary rounded-lg">
+            <h4 className="font-medium text-foreground mb-2">⚡ Respond Quickly</h4>
+            <p className="text-sm text-foreground-secondary">
+              Reply to comments within the first hour to boost engagement and visibility.
+            </p>
+          </div>
+          <div className="p-4 bg-background-secondary rounded-lg">
+            <h4 className="font-medium text-foreground mb-2">💬 Be Personal</h4>
+            <p className="text-sm text-foreground-secondary">
+              Use the commenter&apos;s name and personalize your response to build connections.
+            </p>
+          </div>
+          <div className="p-4 bg-background-secondary rounded-lg">
+            <h4 className="font-medium text-foreground mb-2">🎯 Ask Questions</h4>
+            <p className="text-sm text-foreground-secondary">
+              End your replies with questions to encourage further conversation.
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
