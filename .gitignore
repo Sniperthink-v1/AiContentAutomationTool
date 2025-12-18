@@ -40,3 +40,9 @@ coverage
 
 # Vercel
 .vercel
+
+# Personal documents
+document/
+
+# Temporary files
+tmp/
