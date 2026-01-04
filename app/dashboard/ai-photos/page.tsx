@@ -48,6 +48,12 @@ export default function AIPhotosPage() {
   const [showEnhancedPrompt, setShowEnhancedPrompt] = useState(false)
   const [isCopied, setIsCopied] = useState(false)
   const [isEditingPrompt, setIsEditingPrompt] = useState(false)
+  const [showEnhanceOptions, setShowEnhanceOptions] = useState(false)
+  const [customEnhanceInstructions, setCustomEnhanceInstructions] = useState('')
+  
+  // Store last used prompts for saving
+  const [lastGeneratedPrompt, setLastGeneratedPrompt] = useState('')
+  const [lastGeneratedEnhancedPrompt, setLastGeneratedEnhancedPrompt] = useState('')
   
   // Save functionality states
   const [showSaveModal, setShowSaveModal] = useState(false)
@@ -230,6 +236,7 @@ export default function AIPhotosPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           prompt,
+          customInstructions: customEnhanceInstructions.trim() || undefined,
           settings: {
             style: selectedStyle,
             aspectRatio,
@@ -314,10 +321,10 @@ export default function AIPhotosPage() {
     setGeneratedImageUrl('')
     
     try {
-      // Choose API endpoint based on mode - API handles credit deduction
-      const apiEndpoint = mode === 'text-to-image' 
-        ? '/api/runway/generate-image'       // Runway gen4_image (5-8 credits)
-        : '/api/runway/image-to-image'       // Runway gen4_image_turbo (2 credits)
+      // Use appropriate API based on mode
+      const apiEndpoint = mode === 'image-to-image' 
+        ? '/api/runway/image-to-image'
+        : '/api/gemini/text-to-image'
 
       const response = await fetch(apiEndpoint, {
         method: 'POST',
@@ -342,8 +349,6 @@ export default function AIPhotosPage() {
       const data = await response.json()
       
       if (data.success && data.imageData) {
-        // For demo purposes, we'll show a placeholder
-        // In production, this would be the actual generated image URL
         const imageUrl = data.imageData
         setGeneratedImageUrl(imageUrl)
         setGenerationHistory(prev => [imageUrl, ...prev])
@@ -351,11 +356,15 @@ export default function AIPhotosPage() {
         // Refresh credits after successful generation (API already deducted them)
         fetchCredits()
         
+        // Store prompts for later manual save (when user clicks Save to My Media)
+        setLastGeneratedPrompt(prompt || finalPrompt)
+        setLastGeneratedEnhancedPrompt(enhancedPrompt || '')
+        
         // Clear prompts after successful generation
         setPrompt('')
         setEnhancedPrompt('')
         setShowEnhancedPrompt(false)
-        showAndSaveToast('Photo Generated', 'Your AI photo is ready to view!', 'success', '/dashboard/my-media')
+        showToast('Photo Generated Successfully!', 'success')
       } else {
         showToast('Failed to generate image: ' + (data.message || data.error), 'error')
       }
@@ -460,14 +469,18 @@ export default function AIPhotosPage() {
     
     setIsSaving(true)
     try {
+      // Use the last generated prompts (saved before clearing)
+      const promptToSave = lastGeneratedPrompt || prompt || 'AI Generated Image'
+      const enhancedPromptToSave = lastGeneratedEnhancedPrompt || enhancedPrompt || ''
+      
       const response = await fetch('/api/user/media/save', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           imageData: generatedImageUrl,
-          prompt: prompt,
-          enhancedPrompt: enhancedPrompt,
-          model: mode === 'image-to-image' ? 'runway-gen4-image-turbo' : 'runway-gen4-image',
+          prompt: promptToSave,
+          enhancedPrompt: enhancedPromptToSave,
+          model: mode === 'image-to-image' ? 'gemini-imagen-3' : 'gemini-imagen-3',
           mode: mode,
           settings: {
             style: selectedStyle,
@@ -577,9 +590,36 @@ export default function AIPhotosPage() {
                   </span>
                 </div>
                 <button
+                  onClick={() => setShowEnhanceOptions(!showEnhanceOptions)}
+                  disabled={!prompt.trim()}
+                  className="px-4 py-2 bg-primary/20 hover:bg-primary/30 text-primary rounded-lg transition-all duration-200 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium"
+                >
+                  <Wand2 className="w-4 h-4" />
+                  {showEnhanceOptions ? 'Hide Options' : 'Enhance with AI'}
+                </button>
+              </div>
+            </div>
+            
+            {/* Custom Enhancement Options */}
+            {showEnhanceOptions && (
+              <div className="space-y-3 p-4 bg-background-tertiary rounded-lg border border-border">
+                <label className="block text-sm font-medium text-foreground">
+                  Custom Enhancement Instructions (Optional)
+                </label>
+                <textarea
+                  value={customEnhanceInstructions}
+                  onChange={(e) => setCustomEnhanceInstructions(e.target.value)}
+                  placeholder="e.g., 'Make it more dramatic with stormy weather' or 'Add vintage film look' or 'Focus on warm colors and sunset lighting'"
+                  className="w-full px-4 py-3 bg-background border border-border rounded-lg text-foreground placeholder-foreground-secondary resize-none focus:outline-none focus:ring-2 focus:ring-primary"
+                  rows={3}
+                />
+                <p className="text-xs text-foreground-secondary">
+                  Describe how you want to enhance your prompt. Leave empty for standard AI enhancement.
+                </p>
+                <button
                   onClick={handleEnhancePrompt}
                   disabled={!prompt.trim() || isEnhancing}
-                  className="px-4 py-2 bg-primary/20 hover:bg-primary/30 text-primary rounded-lg transition-all duration-200 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium"
+                  className="w-full px-4 py-2 bg-primary hover:bg-primary/90 text-white rounded-lg transition-all duration-200 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed font-medium"
                 >
                   {isEnhancing ? (
                     <>
@@ -589,12 +629,12 @@ export default function AIPhotosPage() {
                   ) : (
                     <>
                       <Wand2 className="w-4 h-4" />
-                      Enhance with AI
+                      Enhance Prompt
                     </>
                   )}
                 </button>
               </div>
-            </div>
+            )}
             
             <textarea
               value={prompt}
@@ -704,58 +744,6 @@ export default function AIPhotosPage() {
             )}
           </div>
 
-          {/* Prompt Templates */}
-          <div className="bg-background-secondary rounded-xl p-6 border border-border">
-            <h3 className="text-lg font-semibold text-foreground mb-4 flex items-center gap-2">
-              <Zap className="w-5 h-5 text-primary" />
-              Quick Start Templates
-            </h3>
-            <div className="grid grid-cols-2 gap-3">
-              {promptTemplates.map((template) => (
-                <button
-                  key={template.title}
-                  onClick={() => {
-                    setPrompt(template.prompt);
-                    setEnhancedPrompt('');
-                    setShowEnhancedPrompt(false);
-                  }}
-                  className="p-4 bg-background hover:bg-background-tertiary border border-border rounded-lg transition-all duration-200 hover:scale-105 hover:border-primary/50 text-left group"
-                >
-                  <div className="text-2xl mb-2">{template.emoji}</div>
-                  <div className="text-sm font-medium text-foreground group-hover:text-primary transition-colors">
-                    {template.title}
-                  </div>
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Style Selection */}
-          <div className="bg-background-secondary rounded-xl p-6 border border-border">
-            <h3 className="text-lg font-semibold text-foreground mb-4 flex items-center gap-2">
-              <Palette className="w-5 h-5 text-primary" />
-              IMAGE STYLE
-            </h3>
-            <div className="grid grid-cols-2 gap-3">
-              {styles.map((style) => (
-                <button
-                  key={style.id}
-                  onClick={() => setSelectedStyle(style.id)}
-                  onDoubleClick={() => setSelectedStyle('photorealistic')} // Reset to default on double-click
-                  className={`p-4 rounded-lg border-2 transition-all duration-200 hover:scale-105 ${
-                    selectedStyle === style.id
-                      ? 'border-primary bg-primary/10'
-                      : 'border-border bg-background hover:border-border-hover'
-                  }`}
-                >
-                  <div className="text-2xl mb-2">{style.emoji}</div>
-                  <div className="text-sm font-medium text-foreground">{style.name}</div>
-                  <div className="text-xs text-foreground-secondary mt-1">{style.description}</div>
-                </button>
-              ))}
-            </div>
-          </div>
-
           {/* Advanced Options */}
           <div className="bg-background-secondary rounded-xl p-6 border border-border space-y-6">
             <h3 className="text-lg font-semibold text-foreground flex items-center gap-2">
@@ -802,53 +790,6 @@ export default function AIPhotosPage() {
                   >
                     <div className="text-sm font-medium text-foreground">{q.label}</div>
                     <div className="text-xs text-foreground-secondary">{q.description}</div>
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Mood */}
-            <div>
-              <label className="text-sm font-medium text-foreground mb-2 block">MOOD</label>
-              <div className="grid grid-cols-3 gap-2">
-                {moods.map((m) => (
-                  <button
-                    key={m.id}
-                    onClick={() => setMood(m.id)}
-                    onDoubleClick={() => setMood('vibrant')} // Reset to default on double-click
-                    className={`p-3 rounded-lg border-2 transition-all ${
-                      mood === m.id
-                        ? 'border-primary bg-primary/10'
-                        : 'border-border bg-background hover:border-border-hover'
-                    }`}
-                  >
-                    <div className="text-lg mb-1">{m.emoji}</div>
-                    <div className="text-xs font-medium text-foreground">{m.label}</div>
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Lighting */}
-            <div>
-              <label className="text-sm font-medium text-foreground mb-2 block flex items-center gap-2">
-                <Sun className="w-4 h-4 text-primary" />
-                LIGHTING STYLE
-              </label>
-              <div className="grid grid-cols-3 gap-2">
-                {lightingOptions.map((light) => (
-                  <button
-                    key={light.id}
-                    onClick={() => setLighting(light.id)}
-                    onDoubleClick={() => setLighting('natural')} // Reset to default on double-click
-                    className={`p-3 rounded-lg border-2 transition-all ${
-                      lighting === light.id
-                        ? 'border-primary bg-primary/10'
-                        : 'border-border bg-background hover:border-border-hover'
-                    }`}
-                  >
-                    <div className="text-lg mb-1">{light.emoji}</div>
-                    <div className="text-xs font-medium text-foreground">{light.label}</div>
                   </button>
                 ))}
               </div>

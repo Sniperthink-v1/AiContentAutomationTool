@@ -15,7 +15,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const { prompt, settings } = await request.json()
+    const { prompt, settings, customInstructions } = await request.json()
 
     if (!prompt) {
       return NextResponse.json(
@@ -54,32 +54,64 @@ export async function POST(request: NextRequest) {
     let enhancedPrompt = ''
 
     // Create detailed instruction for image prompt enhancement
-    const enhancementInstruction = `
-You are a professional AI image prompt engineer. Take the following basic image idea and expand it into a detailed, comprehensive prompt suitable for AI image generation.
+    const enhancementInstruction = customInstructions 
+      ? `
+You are a professional AI image prompt engineer. Enhance the following image prompt based on the user's specific enhancement instructions while PRESERVING THE EXACT CORE CONCEPT.
 
-User's basic idea: "${prompt}"
+User's prompt: "${prompt}"
+
+User's custom enhancement instructions: "${customInstructions}"
 
 Image settings:
 - Style: ${settings?.style || 'photorealistic'}
 - Aspect Ratio: ${settings?.aspectRatio || '1:1'}
 - Quality: ${settings?.quality || 'high'}
 - Mood: ${settings?.mood || 'vibrant'}
-- Lighting: ${settings?.lighting || 'natural'}
-- Color Palette: ${settings?.colorPalette || 'none'}
+- Lighting: ${settings?.lighting || 'natural'}${settings?.colorPalette && settings.colorPalette !== 'none' ? `
+- Color Palette: ${settings.colorPalette}` : ''}
 
-Please create a detailed image generation prompt that includes:
-1. **Main Subject**: Clear description of the primary focus
-2. **Visual Details**: Textures, materials, patterns, specific features
-3. **Composition**: Framing, perspective, depth of field, rule of thirds
-4. **Lighting**: Direction, quality, color temperature, shadows, highlights
-5. **Color Palette**: Specific colors, saturation, contrast, harmony
-6. **Atmosphere & Mood**: Emotional tone, ambiance, feeling
-7. **Style & Quality**: Artistic style, technical specifications, level of detail
-8. **Background & Environment**: Setting, context, surrounding elements
+CRITICAL RULES:
+1. KEEP the user's main subject, concept, and context EXACTLY as they described
+2. Apply the user's custom enhancement instructions to the prompt
+3. DO NOT change the core meaning or subject
+4. Focus on implementing the user's specific enhancement requests
+5. Add technical details that support the user's vision
+6. OUTPUT MUST BE MAXIMUM 1000 CHARACTERS - Be concise and efficient with words
 
-Format your response as a single, cohesive paragraph that reads like a professional image generation prompt. Be specific, descriptive, and use visual language that an AI image generator can interpret. Focus on visual elements only - no mentions of audio, movement, or time-based elements.
+Output a single, cohesive paragraph (max 1000 characters) that incorporates the user's enhancement instructions while keeping their original idea intact.
+`
+      : `
+You are a professional AI image prompt engineer. Enhance the following image prompt by adding technical and visual refinement details while PRESERVING THE EXACT CORE CONCEPT AND CONTEXT.
 
-Example format: "A [subject] with [specific details], [composition details], [lighting description], featuring [colors and mood], in a [style], [background and environment], [quality and technical specs]"
+User's prompt: "${prompt}"
+
+Image settings:
+- Style: ${settings?.style || 'photorealistic'}
+- Aspect Ratio: ${settings?.aspectRatio || '1:1'}
+- Quality: ${settings?.quality || 'high'}
+- Mood: ${settings?.mood || 'vibrant'}
+- Lighting: ${settings?.lighting || 'natural'}${settings?.colorPalette && settings.colorPalette !== 'none' ? `
+- Color Palette: ${settings.colorPalette}` : ''}
+
+CRITICAL RULES:
+1. KEEP the user's main subject, concept, and context EXACTLY as they described
+2. DO NOT change the meaning, theme, or core elements of their idea
+3. ONLY ADD technical refinements like:
+   - Specific visual details (textures, materials, patterns)
+   - Camera/composition details (framing, perspective, depth of field)
+   - Lighting specifics (direction, quality, color temperature, shadows)${settings?.colorPalette && settings.colorPalette !== 'none' ? `
+   - Color refinements using ${settings.colorPalette} palette` : `
+   - Natural color harmony (don't force specific color schemes unless present in original prompt)`}
+   - Atmospheric details (mood, ambiance)
+   - Technical quality specs (resolution, sharpness, detail level)
+4. If the user mentions specific elements (people, objects, locations, actions), those MUST remain central
+5. Only enhance what's already there - don't add new major elements${!settings?.colorPalette || settings.colorPalette === 'none' ? `
+6. DO NOT impose a specific color palette - let colors emerge naturally from the scene unless user specified colors` : ''}
+7. OUTPUT MUST BE MAXIMUM 1000 CHARACTERS - Be concise and efficient with words
+
+Output a single, cohesive paragraph (max 1000 characters) that keeps the user's idea intact but with professional technical refinements for AI image generation.
+
+Example: If user says "a cat sitting on a windowsill", enhance lighting/textures/atmosphere but keep it about a cat on a windowsill, not a cat in a garden.
 `
 
     // Try each model with retry logic

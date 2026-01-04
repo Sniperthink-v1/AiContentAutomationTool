@@ -19,7 +19,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const { songId, title, audioUrl, imageUrl, duration, tags, modelName } = await request.json()
+    const { songId, title, audioUrl, imageUrl, duration, tags, modelName, prompt } = await request.json()
 
     if (!songId || !title || !audioUrl) {
       return NextResponse.json(
@@ -28,13 +28,13 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Save song to database
+    // Save song to database (including prompt)
     await client.query(
-      `INSERT INTO saved_songs (id, user_id, title, audio_url, image_url, duration, tags, model_name, created_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())
+      `INSERT INTO saved_songs (id, user_id, title, audio_url, image_url, duration, tags, model_name, prompt, created_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW())
        ON CONFLICT (id, user_id) DO UPDATE 
-       SET title = $3, audio_url = $4, image_url = $5, duration = $6, tags = $7, model_name = $8`,
-      [songId, user.id, title, audioUrl, imageUrl || '', duration || 0, tags || '', modelName || '']
+       SET title = $3, audio_url = $4, image_url = $5, duration = $6, tags = $7, model_name = $8, prompt = $9`,
+      [songId, user.id, title, audioUrl, imageUrl || '', duration || 0, tags || '', modelName || '', prompt || '']
     )
 
     return NextResponse.json({

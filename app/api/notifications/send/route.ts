@@ -24,7 +24,7 @@ export async function POST(request: NextRequest) {
     }
 
     const success = await sendNotification({
-      userId: parseInt(user.id),
+      userId: user.id,  // user.id is already a UUID string
       title,
       message,
       type,

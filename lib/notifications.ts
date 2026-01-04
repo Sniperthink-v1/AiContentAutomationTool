@@ -3,7 +3,7 @@ import pool from './db'
 export type NotificationType = 'video' | 'photo' | 'music' | 'credits' | 'feature' | 'info' | 'success' | 'warning' | 'error'
 
 interface NotificationParams {
-  userId: number
+  userId: string  // UUID
   title: string
   message: string
   type: NotificationType
@@ -58,7 +58,7 @@ export async function sendNotification(params: NotificationParams): Promise<bool
 /**
  * Send a video generation complete notification
  */
-export async function notifyVideoGenerated(userId: number, videoName?: string) {
+export async function notifyVideoGenerated(userId: string, videoName?: string) {
   return sendNotification({
     userId,
     title: 'Video Generated',
@@ -71,7 +71,7 @@ export async function notifyVideoGenerated(userId: number, videoName?: string) {
 /**
  * Send a photo generation complete notification
  */
-export async function notifyPhotoGenerated(userId: number, photoName?: string) {
+export async function notifyPhotoGenerated(userId: string, photoName?: string) {
   return sendNotification({
     userId,
     title: 'Photo Generated',
@@ -84,7 +84,7 @@ export async function notifyPhotoGenerated(userId: number, photoName?: string) {
 /**
  * Send a music generation complete notification
  */
-export async function notifyMusicGenerated(userId: number, songName?: string) {
+export async function notifyMusicGenerated(userId: string, songName?: string) {
   return sendNotification({
     userId,
     title: 'Music Generated',
@@ -97,7 +97,7 @@ export async function notifyMusicGenerated(userId: number, songName?: string) {
 /**
  * Send a low credits warning notification
  */
-export async function notifyLowCredits(userId: number, remainingCredits: number) {
+export async function notifyLowCredits(userId: string, remainingCredits: number) {
   return sendNotification({
     userId,
     title: 'Credits Low',
@@ -110,7 +110,7 @@ export async function notifyLowCredits(userId: number, remainingCredits: number)
 /**
  * Send a welcome notification for new users
  */
-export async function notifyWelcome(userId: number, userName?: string) {
+export async function notifyWelcome(userId: string, userName?: string) {
   return sendNotification({
     userId,
     title: 'Welcome to SniperThinkAI!',

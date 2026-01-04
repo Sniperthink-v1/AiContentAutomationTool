@@ -1,13 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getAuthUser } from '@/lib/middleware'
 import pool from '@/lib/db'
-import { GoogleGenAI } from '@google/genai'
+import Replicate from 'replicate'
 
 export async function POST(request: NextRequest) {
   try {
     const { prompt, settings } = await request.json()
 
-    console.log('🎨 Gemini Image Generation Request:', { 
+    console.log('🎨 Replicate Image Generation Request:', { 
       prompt: prompt?.substring(0, 50), 
       settings 
     })
@@ -30,16 +30,16 @@ export async function POST(request: NextRequest) {
     }
 
     // Check if API key exists
-    const apiKey = process.env.GEMINI_IMAGE_API_KEY || process.env.VEO_API_KEY || process.env.GEMINI_API_KEY
+    const apiKey = process.env.REPLICATE_API_KEY
     if (!apiKey) {
-      console.error('❌ Gemini API key not configured')
+      console.error('❌ Replicate API key not configured')
       return NextResponse.json(
-        { error: 'Gemini API key not configured' },
+        { error: 'Replicate API key not configured' },
         { status: 500 }
       )
     }
 
-    // Deduct credits for text-to-image generation with gen4_image (5 for standard, 8 for high quality) - Use direct database query instead of API call
+    // Deduct credits - Replicate costs 2 credits
     const client = await pool.connect()
     
     try {
@@ -56,8 +56,6 @@ export async function POST(request: NextRequest) {
       }
 
       const currentCredits = creditsResult.rows[0]
-      
-      // Imagen 3 costs 2 credits regardless of quality
       const requiredCredits = 2
 
       // Check if user has enough credits
@@ -89,7 +87,7 @@ export async function POST(request: NextRequest) {
         `INSERT INTO credit_transactions 
          (user_id, action_type, credits_used, model_used, description)
          VALUES ($1, $2, $3, $4, $5)`,
-        [user.id, 'image_generation', requiredCredits, 'gemini-imagen-3', `Image generation: ${prompt.substring(0, 50)}...`]
+        [user.id, 'image_generation', requiredCredits, 'gemini-2.0-flash', `Image generation: ${prompt.substring(0, 50)}...`]
       )
 
       await client.query('COMMIT')
@@ -107,60 +105,55 @@ export async function POST(request: NextRequest) {
       client.release()
     }
 
-    // Use the prompt exactly as provided - no modifications
-    const enhancedPrompt = prompt
+    // Initialize Gemini client instead of Replicate
+    const { GoogleGenAI, Modality } = await import('@google/genai')
+    const geminiApiKey = process.env.GEMINI_IMAGE_API_KEY || process.env.VEO_API_KEY || process.env.GEMINI_API_KEY
     
-    // Initialize Google GenAI client
-    const client_gemini = new GoogleGenAI({ apiKey })
+    if (!geminiApiKey) {
+      throw new Error('Gemini API key not configured')
+    }
+    
+    const gemini = new GoogleGenAI({ apiKey: geminiApiKey })
 
-    console.log('🎨 Generating image with Gemini Imagen 3...')
-    console.log('Prompt:', enhancedPrompt.substring(0, 100))
+    console.log('🎬 Calling Gemini API for image generation...')
+    console.log('Prompt:', prompt.substring(0, 100))
 
-    // Text-to-Image mode using Imagen 3 Pro (higher quality)
-    const response = await client_gemini.models.generateImages({
-      model: 'imagen-3.0-generate-001', // Imagen 3 Pro - $0.134/image, higher quality
-      prompt: enhancedPrompt,
+    // Use Gemini 2.0 Flash Experimental with image generation
+    const response = await gemini.models.generateContent({
+      model: 'gemini-2.0-flash-exp',
+      contents: [{
+        role: 'user',
+        parts: [{ text: `Generate a high-quality image: ${prompt}` }]
+      }],
       config: {
-        numberOfImages: 1,
-        aspectRatio: settings?.aspectRatio === '16:9' ? '16:9' : 
-                    settings?.aspectRatio === '9:16' ? '9:16' : 
-                    settings?.aspectRatio === '4:5' ? '3:4' : '1:1',
+        responseModalities: [Modality.IMAGE],
       }
     })
 
-    console.log('Imagen response received')
-
-    if (!response.generatedImages || response.generatedImages.length === 0) {
-      // Check if there's a filter reason
-      const filterReason = (response as any).filterReason
-      if (filterReason) {
-        return NextResponse.json(
-          { 
-            error: 'Image generation blocked by safety filters',
-            message: `Content was filtered: ${filterReason}. Please try a different prompt.`
-          },
-          { status: 400 }
-        )
-      }
-      throw new Error('No image generated - the model returned empty results')
-    }
-
-    const generatedImage = response.generatedImages[0]
+    // Extract image from response
+    const parts = response.candidates?.[0]?.content?.parts || []
+    let imageData = ''
     
-    if (!generatedImage.image?.imageBytes) {
-      throw new Error('Generated image has no data')
+    for (const part of parts) {
+      if (part.inlineData) {
+        imageData = `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`
+        break
+      }
     }
 
-    const imageData = `data:image/png;base64,${generatedImage.image.imageBytes}`
-    console.log('✅ Image generated successfully')
+    if (!imageData) {
+      throw new Error('No image generated by Gemini')
+    }
+
+    console.log('✅ Image generated successfully with Gemini')
 
     return NextResponse.json({
       success: true,
       prompt: prompt,
-      enhancedPrompt: enhancedPrompt,
+      enhancedPrompt: prompt,
       imageData: imageData,
       settings: settings,
-      model: 'gemini-imagen-3',
+      model: 'gemini-2.0-flash',
       timestamp: new Date().toISOString()
     })
 

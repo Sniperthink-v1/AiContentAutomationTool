@@ -276,7 +276,8 @@ export default function AIMusicPage() {
           imageUrl: song.imageUrl || song.coverUrl || '',
           duration: song.duration || 0,
           tags: song.tags || song.style || '',
-          modelName: model
+          modelName: model,
+          prompt: prompt || song.prompt || '' // Include the prompt used to generate the song
         })
       })
 

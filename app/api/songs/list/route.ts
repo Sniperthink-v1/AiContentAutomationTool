@@ -19,9 +19,9 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    // Get all saved songs for the user
+    // Get all saved songs for the user (including prompt)
     const result = await client.query(
-      `SELECT id, title, audio_url, image_url, duration, tags, model_name, created_at 
+      `SELECT id, title, audio_url, image_url, duration, tags, model_name, prompt, created_at 
        FROM saved_songs 
        WHERE user_id = $1 
        ORDER BY created_at DESC`,
@@ -36,6 +36,7 @@ export async function GET(request: NextRequest) {
       duration: row.duration,
       tags: row.tags,
       modelName: row.model_name,
+      prompt: row.prompt,
       createdAt: row.created_at
     }))
 

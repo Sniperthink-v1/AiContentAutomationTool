@@ -51,7 +51,7 @@ export async function POST(request: NextRequest) {
 
     // Send notification about saved draft
     await sendNotification({
-      userId: parseInt(user.id),
+      userId: user.id,  // user.id is already a UUID string
       title: 'Draft Saved',
       message: `Your draft "${finalOriginalPrompt.substring(0, 50)}${finalOriginalPrompt.length > 50 ? '...' : ''}" has been saved`,
       type: 'success',

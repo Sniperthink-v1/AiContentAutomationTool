@@ -530,12 +530,12 @@ export default function SettingsPage() {
                 <h3 className="text-lg font-semibold text-foreground mb-4">🔧 Troubleshooting</h3>
                 <div className="space-y-3">
                   <div className="p-3 bg-orange-500/10 border border-orange-500/20 rounded-lg">
-                    <p className="font-medium text-orange-400 text-sm">Error: "No Instagram Business account found"</p>
+                    <p className="font-medium text-orange-400 text-sm">Error: &quot;No Instagram Business account found&quot;</p>
                     <p className="text-sm text-foreground-secondary mt-2">This means:</p>
                     <ul className="text-xs text-foreground-muted mt-1 space-y-1 ml-4 list-disc">
                       <li>Your Instagram account is still a Personal account, OR</li>
                       <li>Your Instagram is not connected to any Facebook Page, OR</li>
-                      <li>You didn't select the correct Facebook Page during authorization</li>
+                      <li>You didn&apos;t select the correct Facebook Page during authorization</li>
                     </ul>
                     <p className="text-xs text-foreground-secondary mt-2">
                       <strong>Solution:</strong> Complete all 3 steps above, then try connecting again.
@@ -544,7 +544,7 @@ export default function SettingsPage() {
                   <div className="p-3 bg-background-tertiary rounded-lg">
                     <p className="font-medium text-foreground text-sm">Still having issues?</p>
                     <p className="text-xs text-foreground-secondary mt-1">
-                      Make sure you're logging into the same Facebook account that owns the Page connected to your Instagram.
+                      Make sure you&apos;re logging into the same Facebook account that owns the Page connected to your Instagram.
                     </p>
                   </div>
                 </div>

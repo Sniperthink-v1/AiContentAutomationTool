@@ -40,17 +40,20 @@ export async function POST(request: NextRequest) {
     // For text-to-video, we'd need a different model like AnimateDiff or Runway
     // For now, we'll use a text-to-image model first, then convert to video
     
-    // Step 1: Generate an image from the prompt using FLUX
+    // Step 1: Generate an image from the prompt using FLUX Dev (better prompt adherence)
     console.log('Step 1: Generating initial image from prompt...')
     const imageOutput = await replicate.run(
-      "black-forest-labs/flux-schnell",
+      "black-forest-labs/flux-dev",
       {
         input: {
-          prompt: `${prompt}. Cinematic, high quality, ${settings?.cameraStyle || 'dynamic'} camera movement, professional video frame.`,
+          prompt: prompt, // Use prompt directly without diluting
           aspect_ratio: "16:9", // Video aspect ratio
           num_outputs: 1,
           output_format: "png",
-          output_quality: 90,
+          output_quality: 95,
+          num_inference_steps: 35,
+          guidance: 3.5, // Higher guidance = follows prompt more closely
+          go_fast: false,
         }
       }
     )

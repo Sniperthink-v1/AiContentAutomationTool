@@ -15,14 +15,18 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'Video URL is required' }, { status: 400 })
     }
 
+    // Ensure prompts are saved (never null)
+    const finalPrompt = prompt || 'AI Generated Video'
+    const finalEnhancedPrompt = enhancedPrompt || null
+    
     const result = await pool.query(
       `INSERT INTO ai_videos (user_id, prompt, enhanced_prompt, video_url, source_media_url, model, mode, duration, settings, credits_used)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
        RETURNING id`,
       [
         user.id,
-        prompt || '',
-        enhancedPrompt || '',
+        finalPrompt,
+        finalEnhancedPrompt,
         videoUrl,
         sourceMediaUrl || null,
         model || 'unknown',

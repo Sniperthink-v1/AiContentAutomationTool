@@ -18,14 +18,18 @@ export async function POST(request: NextRequest) {
     // Use imageUrl if provided, otherwise store base64 data URL
     const urlToStore = imageUrl || imageData
 
+    // Ensure prompts are saved (never null)
+    const finalPrompt = prompt || 'AI Generated Image'
+    const finalEnhancedPrompt = enhancedPrompt || null
+    
     const result = await pool.query(
       `INSERT INTO ai_images (user_id, prompt, enhanced_prompt, image_url, source_image_url, model, mode, settings, credits_used)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
        RETURNING id`,
       [
         user.id,
-        prompt || '',
-        enhancedPrompt || '',
+        finalPrompt,
+        finalEnhancedPrompt,
         urlToStore,
         sourceImageUrl || null,
         model || 'unknown',

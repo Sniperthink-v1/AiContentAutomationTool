@@ -24,9 +24,72 @@ import {
   Merge,
   X,
   ChevronRight,
-  Film
+  Film,
+  ZoomIn,
+  Maximize2,
+  Info
 } from 'lucide-react'
 import { useToast } from '@/lib/components/Toast'
+
+// Video Viewer Modal Component
+function VideoViewerModal({ isOpen, onClose, videoUrl, prompt }: { isOpen: boolean, onClose: () => void, videoUrl: string, prompt: string }) {
+  // Handle ESC key press
+  useEffect(() => {
+    if (!isOpen) return
+    
+    const handleEsc = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose()
+    }
+    window.addEventListener('keydown', handleEsc)
+    return () => window.removeEventListener('keydown', handleEsc)
+  }, [isOpen, onClose])
+
+  if (!isOpen) return null
+
+  return (
+    <div 
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/95 animate-fade-in backdrop-blur-sm"
+      onClick={onClose}
+    >
+      <div className="relative max-w-7xl max-h-[95vh] w-full animate-scale-in" onClick={(e) => e.stopPropagation()}>
+        {/* Close Button */}
+        <button
+          onClick={onClose}
+          className="absolute -top-12 right-0 w-10 h-10 flex items-center justify-center rounded-full bg-white/10 hover:bg-white/20 text-white transition-all backdrop-blur-sm z-10"
+        >
+          <X className="w-6 h-6" />
+        </button>
+
+        {/* Video Container */}
+        <div className="relative bg-black rounded-xl overflow-hidden shadow-2xl border border-white/10">
+          <video
+            src={videoUrl}
+            controls
+            autoPlay
+            className="w-full h-auto max-h-[85vh] object-contain"
+          />
+          
+          {/* Video Info Overlay */}
+          {prompt && (
+            <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/90 via-black/60 to-transparent p-6 pointer-events-none">
+              <div className="flex items-start gap-3">
+                <Sparkles className="w-5 h-5 text-primary mt-1 flex-shrink-0" />
+                <p className="text-white text-sm leading-relaxed line-clamp-2">
+                  {prompt}
+                </p>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Helper Text */}
+        <div className="text-center mt-4">
+          <p className="text-white/60 text-sm">Click outside or press ESC to close</p>
+        </div>
+      </div>
+    </div>
+  )
+}
 
 export default function AIVideoPage() {
   // Toast notifications
@@ -42,6 +105,10 @@ export default function AIVideoPage() {
   const [isGenerating, setIsGenerating] = useState(false)
   const [selectedStyle, setSelectedStyle] = useState('cinematic')
   
+  // Store last generated prompts for saving (in case prompts are cleared)
+  const [lastGeneratedPrompt, setLastGeneratedPrompt] = useState('')
+  const [lastGeneratedEnhancedScript, setLastGeneratedEnhancedScript] = useState('')
+  
   // Model and mode selection
   const [audioCategory, setAudioCategory] = useState<'without-audio' | 'with-audio'>('without-audio')
   const [videoInputType, setVideoInputType] = useState<'image-to-video' | 'text-to-video'>('text-to-video')
@@ -56,6 +123,8 @@ export default function AIVideoPage() {
   const [showEnhancedScript, setShowEnhancedScript] = useState(false)
   const [isCopied, setIsCopied] = useState(false)
   const [isEditingScript, setIsEditingScript] = useState(false)
+  const [showEnhanceOptions, setShowEnhanceOptions] = useState(false)
+  const [customEnhanceInstructions, setCustomEnhanceInstructions] = useState('')
   
   // Edit clip modal state
   const [editClipModal, setEditClipModal] = useState<{ isOpen: boolean; clipIndex: number; clipText: string }>({
@@ -68,7 +137,6 @@ export default function AIVideoPage() {
   const [aspectRatio, setAspectRatio] = useState('9:16') // Instagram default
   const [videoQuality, setVideoQuality] = useState('high')
   const [transition, setTransition] = useState('smooth')
-  const [textOverlay, setTextOverlay] = useState('')
   const [cameraMovement, setCameraMovement] = useState('dynamic')
   
   // Video generation options
@@ -99,6 +167,17 @@ export default function AIVideoPage() {
   const [generationStatus, setGenerationStatus] = useState('') // 'queued', 'processing', 'rendering', 'complete'
   const [generatedVideoUrl, setGeneratedVideoUrl] = useState('')
   const [jobId, setJobId] = useState('')
+  
+  // Video viewer modal state
+  const [videoViewer, setVideoViewer] = useState<{
+    isOpen: boolean
+    videoUrl: string
+    prompt: string
+  }>({
+    isOpen: false,
+    videoUrl: '',
+    prompt: ''
+  })
   
   // Multi-clip workflow states
   const [generatedClips, setGeneratedClips] = useState<{
@@ -364,8 +443,23 @@ export default function AIVideoPage() {
     return currentPricing.creditsPerSecond * duration
   }
 
-  // Get number of clips needed for the duration (Veo 3.1 generates 8-second clips)
+  // Get number of clips needed for the duration
+  // When enhancing prompts, splits longer videos into 8-second clips
+  // When generating from a single prompt (not enhanced), creates one clip with full duration
   const getClipCount = () => {
+    if (isUsingVeo) {
+      // If script sections exist (enhanced/multi-scene), use their count
+      // Otherwise, use 1 clip with full duration for simple prompts
+      if (scriptSections.length > 0) {
+        return scriptSections.length
+      }
+      return 1 // Single clip with full selected duration (8/16/24/32s)
+    }
+    return 1
+  }
+
+  // Calculate clip count for enhancement (always splits into 8-second clips)
+  const getClipCountForEnhancement = () => {
     if (isUsingVeo) {
       return Math.ceil(parseInt(selectedDuration) / 8)
     }
@@ -494,7 +588,7 @@ export default function AIVideoPage() {
   const handleEnhancePrompt = async () => {
     if (!prompt.trim()) return
 
-    const clipCount = getClipCount()
+    const clipCount = getClipCountForEnhancement() // Use enhancement clip count (splits into 8s clips)
     
     setIsEnhancing(true)
     setScriptSections([]) // Reset previous clips
@@ -504,6 +598,7 @@ export default function AIVideoPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           prompt: prompt.trim(),
+          customInstructions: customEnhanceInstructions.trim() || undefined,
           settings: {
             style: selectedStyle,
             duration: parseInt(selectedDuration),
@@ -519,12 +614,27 @@ export default function AIVideoPage() {
       
       if (data.success) {
         setEnhancedScript(data.enhancedScript)
+        console.log('📝 Enhancement response:', { 
+          hasClips: !!data.clips, 
+          clipCount: data.clips?.length || 0,
+          scriptLength: data.enhancedScript?.length || 0
+        })
+        
         // Parse clips from the enhanced script if available
-        if (data.clips && Array.isArray(data.clips)) {
+        if (data.clips && Array.isArray(data.clips) && data.clips.length > 0) {
+          console.log('✅ Using clips from API:', data.clips.length)
+          data.clips.forEach((clip: string, i: number) => {
+            console.log(`  Clip ${i + 1}: ${clip.length} chars - ${clip.substring(0, 50)}...`)
+          })
           setScriptSections(data.clips)
         } else {
           // Parse clips from enhancedScript format "Clip 1: ...\nClip 2: ..."
+          console.log('🔍 Parsing clips from enhanced script text...')
           const clips = parseClipsFromScript(data.enhancedScript)
+          console.log(`✅ Parsed ${clips.length} clips from script`)
+          clips.forEach((clip: string, i: number) => {
+            console.log(`  Clip ${i + 1}: ${clip.length} chars - ${clip.substring(0, 50)}...`)
+          })
           setScriptSections(clips)
         }
         setShowEnhancedScript(true)
@@ -542,11 +652,32 @@ export default function AIVideoPage() {
 
   // Parse clips from enhanced script text
   const parseClipsFromScript = (script: string): string[] => {
-    const clipRegex = /Clip\s*\d+\s*[:\-]\s*([\s\S]*?)(?=Clip\s*\d+|$)/gi
-    const matches = [...script.matchAll(clipRegex)]
-    if (matches.length > 0) {
-      return matches.map(m => m[1].trim())
+    if (!script || script.trim().length === 0) {
+      return []
     }
+    
+    // Try primary regex pattern
+    const clipRegex = /Clip\s*\d+\s*[:\-]\s*([\s\S]*?)(?=(?:Clip\s*\d+|$))/gi
+    const matches = [...script.matchAll(clipRegex)]
+    
+    if (matches.length > 0) {
+      const clips = matches.map(m => m[1].trim()).filter(clip => clip.length > 0)
+      console.log(`Parsed ${clips.length} clips from script`)
+      
+      // Validate clips aren't empty
+      const validClips = clips.filter(clip => clip.length > 20)
+      if (validClips.length > 0) {
+        return validClips
+      }
+    }
+    
+    // Fallback: Split by double newlines or numbered sections
+    const paragraphs = script.split(/\n{2,}/).filter(p => p.trim().length > 20)
+    if (paragraphs.length > 1) {
+      console.log(`Fallback: Split script into ${paragraphs.length} paragraphs`)
+      return paragraphs
+    }
+    
     // If no clip format found, return the whole script as single clip
     return [script.trim()]
   }
@@ -742,7 +873,7 @@ export default function AIVideoPage() {
               setGeneratedVideoUrl(singleVideoUrl)
               setClipGenerationPhase('complete')
               
-              // Save to drafts
+              // Save to drafts only (user can manually save to My Media)
               await saveToDraftsWithData(singleVideoUrl, prompt, enhancedScript)
               
               // Clear prompts
@@ -846,7 +977,7 @@ export default function AIVideoPage() {
     setEnhancedScript('')
     setShowEnhancedScript(false)
     
-    // Save to drafts
+    // Save to drafts only (user can manually save to My Media)
     await saveToDraftsWithData(finalVideoUrl, prompt, enhancedScript)
     
     setIsGenerating(false)
@@ -878,12 +1009,16 @@ export default function AIVideoPage() {
             setGeneratedVideoUrl(data.videoUrl)
             setIsGenerating(false)
             
+            // Store prompts before clearing for later save
+            setLastGeneratedPrompt(prompt)
+            setLastGeneratedEnhancedScript(enhancedScript)
+            
             // Clear prompts after successful generation
             setPrompt('')
             setEnhancedScript('')
             setShowEnhancedScript(false)
             
-            // Auto-save to drafts
+            // Auto-save to drafts only (user can manually save to My Media)
             await saveToDrafts(data.videoUrl)
           } else if (data.status === 'failed') {
             clearInterval(pollInterval)
@@ -1120,10 +1255,10 @@ export default function AIVideoPage() {
         // Show success toast immediately
         showToast(`Video combined successfully! ${data.totalDuration || totalDuration} seconds. Check below!`, 'success')
         
-        // Save to drafts in background (don't await to prevent blocking UI)
+        // Save to drafts only (user can manually save to My Media)
         saveToDraftsWithData(combinedVideoUrl, currentPrompt, currentEnhancedScript)
           .then(() => console.log('Saved to drafts'))
-          .catch(err => console.error('Draft save error:', err))
+          .catch(err => console.error('Save error:', err))
         
       } else {
         throw new Error(data.error || 'Failed to combine videos - no URL returned')
@@ -1226,18 +1361,57 @@ export default function AIVideoPage() {
     }
   }
 
-  // Save video to My Media
-  const saveToMyMedia = async () => {
-    if (!generatedVideoUrl) return
-    
+  // Helper function to save video to My Media (ai_videos table)
+  const saveVideoToMyMedia = async (videoUrl: string, originalPrompt: string, script: string) => {
     try {
       const response = await fetch('/api/user/media/save-video', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          videoUrl: videoUrl,
+          prompt: originalPrompt || 'AI Generated Video',
+          enhancedPrompt: script || originalPrompt || '',
+          model: 'veo-3.1-fast',
+          mode: videoInputType,
+          duration: parseInt(selectedDuration),
+          sourceMediaUrl: referenceImageUrl || sourceVideoUrl || null,
+          settings: {
+            style: selectedStyle,
+            aspectRatio,
+            videoStyle: veoVideoStyle,
+            audioCategory,
+            quality: selectedQualityTier
+          }
+        })
+      })
+      
+      const data = await response.json()
+      if (data.success) {
+        console.log('Video saved to My Media:', data.id)
+      } else {
+        console.error('Failed to save to My Media:', data.error)
+      }
+    } catch (error) {
+      console.error('Failed to save video to My Media:', error)
+    }
+  }
+
+  // Save video to My Media (manual button)
+  const saveToMyMedia = async () => {
+    if (!generatedVideoUrl) return
+    
+    try {
+      // Use stored prompts if current ones are cleared, otherwise use current ones
+      const promptToSave = prompt || lastGeneratedPrompt || 'AI Generated Video'
+      const enhancedPromptToSave = enhancedScript || lastGeneratedEnhancedScript || ''
+      
+      const response = await fetch('/api/user/media/save-video', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
           videoUrl: generatedVideoUrl,
-          prompt: prompt,
-          enhancedPrompt: enhancedScript,
+          prompt: promptToSave,
+          enhancedPrompt: enhancedPromptToSave,
           model: audioCategory === 'with-audio' ? 'veo-3.1-fast' : (videoInputType === 'image-to-video' ? 'runway-gen4-turbo' : 'runway-veo3.1-fast'),
           mode: videoInputType,
           duration: parseInt(selectedDuration),
@@ -1302,6 +1476,14 @@ export default function AIVideoPage() {
     <div className="space-y-6 animate-fade-in">
       {/* Toast Notifications */}
       <ToastContainer />
+      
+      {/* Video Viewer Modal */}
+      <VideoViewerModal
+        isOpen={videoViewer.isOpen}
+        onClose={() => setVideoViewer({ ...videoViewer, isOpen: false })}
+        videoUrl={videoViewer.videoUrl}
+        prompt={videoViewer.prompt}
+      />
       
       {/* Header */}
       <div className="flex items-center justify-between animate-slide-down">
@@ -1544,7 +1726,10 @@ export default function AIVideoPage() {
                     <span className="text-xs text-foreground-secondary">(Select before enhancing prompt)</span>
                   </label>
                   <div className="text-xs text-primary font-medium">
-                    {getClipCount()} clip{getClipCount() > 1 ? 's' : ''} × 8 seconds each
+                    {scriptSections.length > 0 
+                      ? `${getClipCount()} clips × ${Math.ceil(parseInt(selectedDuration) / getClipCount())}s each`
+                      : `${selectedDuration}s single clip`
+                    }
                   </div>
                 </div>
                 <div className="grid grid-cols-4 gap-3">
@@ -1567,34 +1752,6 @@ export default function AIVideoPage() {
                     >
                       <div className="text-lg font-bold text-foreground">{duration.label}</div>
                       <div className="text-xs text-foreground-secondary mt-1">{duration.scripts} clip{duration.scripts > 1 ? 's' : ''}</div>
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Veo 3.1 Video Style Selection */}
-            {selectedModel === 'veo3.1_fast' && (
-              <div className="space-y-2 mb-6">
-                <label className="text-sm font-medium text-foreground">Video Style</label>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                  {veoVideoStyles.map((style, index) => (
-                    <button
-                      key={style.id}
-                      onClick={() => setVeoVideoStyle(style.id)}
-                      style={{ animationDelay: `${index * 50}ms` }}
-                      className={`p-4 rounded-lg border-2 transition-all duration-300 animate-scale-in hover:scale-105 text-left ${
-                        veoVideoStyle === style.id
-                          ? 'border-primary bg-primary/10 scale-105'
-                          : 'border-border hover:border-primary/50 bg-background-tertiary'
-                      }`}
-                    >
-                      <div className="flex items-center gap-2 mb-2">
-                        <span className="text-2xl">{style.emoji}</span>
-                        <div className="text-sm font-bold text-foreground">{style.name}</div>
-                      </div>
-                      <div className="text-xs text-foreground-secondary mb-2">{style.description}</div>
-                      <div className="text-xs text-foreground-muted italic">e.g., {style.example}</div>
                     </button>
                   ))}
                 </div>
@@ -1641,42 +1798,96 @@ export default function AIVideoPage() {
                 </label>
                 <div className="flex items-center gap-3">
                   <div className="flex items-center gap-2 px-3 py-1 bg-orange-500/10 border border-orange-500/20 rounded-lg">
-                    <Zap className="w-3.5 h-3.5 text-orange-500" />
-                    <span className="text-xs font-medium text-foreground">
-                      Cost: <span className="text-orange-500 font-bold">5 AI credits</span>
+                    <Sparkles className="w-3.5 h-3.5 text-orange-500" />
+                    <span className="text-xs font-medium text-orange-500">
+                      5 AI Credits
                     </span>
                   </div>
                   <button
+                    onClick={() => setShowEnhanceOptions(!showEnhanceOptions)}
+                    className="text-xs text-primary hover:text-primary/80 font-medium transition-colors flex items-center gap-1"
+                  >
+                    <Settings className="w-3.5 h-3.5" />
+                    {showEnhanceOptions ? 'Hide Options' : 'Customize Enhancement'}
+                  </button>
+                </div>
+              </div>
+              
+              {/* Example prompt helper - collapsible */}
+              {selectedModel === 'veo3.1_fast' && veoVideoStyle === 'dialogue' && (
+                <details className="mb-3 p-3 bg-blue-500/5 border border-blue-500/20 rounded-lg">
+                  <summary className="text-xs font-medium text-blue-400 cursor-pointer flex items-center gap-2">
+                    <Info className="w-3.5 h-3.5" />
+                    See example with dialogue and descriptions
+                  </summary>
+                  <div className="mt-3 text-xs text-foreground-secondary space-y-2">
+                    <div className="p-2 bg-background-tertiary rounded border border-border">
+                      <div className="font-medium text-foreground mb-1">✅ Good Example:</div>
+                      <div className="italic">
+                        &quot;A young woman named Sarah enters a busy coffee shop wearing a red jacket. She looks around nervously. 
+                        Sarah approaches the barista at the counter. Sarah: &apos;Hi, can I get a large latte please?&apos; 
+                        The barista smiles warmly. Barista: &apos;Of course! That&apos;ll be ready in just a moment.&apos; 
+                        Sarah pulls out her phone and checks the time while waiting.&quot;
+                      </div>
+                    </div>
+                    <div className="text-[10px] text-foreground-secondary">
+                      💡 Include: character names, actions, settings, dialogue in quotes, emotions, and visual details
+                    </div>
+                  </div>
+                </details>
+              )}
+              
+              {/* Custom Enhancement Options */}
+              {showEnhanceOptions && (
+                <div className="space-y-3 p-4 bg-background-tertiary rounded-lg border border-border animate-slide-down">
+                  <label className="block text-sm font-medium text-foreground">
+                    Custom Enhancement Instructions (Optional)
+                  </label>
+                  <textarea
+                    value={customEnhanceInstructions}
+                    onChange={(e) => setCustomEnhanceInstructions(e.target.value)}
+                    placeholder="e.g., 'Add dramatic slow-motion effects' or 'Make it energetic with fast cuts' or 'Include sunset golden hour lighting'"
+                    className="w-full px-4 py-3 bg-background border border-border rounded-lg text-foreground placeholder-foreground-secondary resize-none focus:outline-none focus:ring-2 focus:ring-primary"
+                    rows={3}
+                  />
+                  <p className="text-xs text-foreground-secondary">
+                    Describe how you want to enhance your video prompt. Leave empty for standard AI enhancement.
+                  </p>
+                  <button
                     onClick={handleEnhancePrompt}
                     disabled={!prompt.trim() || isEnhancing}
-                    className="px-4 py-1.5 bg-gradient-to-r from-primary to-primary/80 hover:from-primary-hover hover:to-primary text-white rounded-lg text-sm font-medium transition-all duration-300 flex items-center gap-2 hover:scale-105 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 shadow-lg shadow-primary/20"
+                    className="w-full px-4 py-2 bg-primary hover:bg-primary/90 text-white rounded-lg transition-all duration-200 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed font-medium"
                   >
                     {isEnhancing ? (
                       <>
                         <Loader2 className="w-4 h-4 animate-spin" />
-                        Creating {getClipCount()} clip{getClipCount() > 1 ? 's' : ''}...
+                        Creating {getClipCountForEnhancement()} clip{getClipCountForEnhancement() > 1 ? 's' : ''}...
                       </>
                     ) : (
                       <>
                         <Zap className="w-4 h-4" />
-                        Enhance with AI
+                        Enhance Prompt
                       </>
                     )}
                   </button>
                 </div>
-              </div>
+              )}
               <textarea
                 value={prompt}
                 onChange={(e) => setPrompt(e.target.value)}
                 placeholder={selectedModel === 'veo3.1_fast' 
-                  ? `Describe your ${selectedDuration}-second video... AI will create ${getClipCount()} clip${getClipCount() > 1 ? 's' : ''} of 8 seconds each`
+                  ? veoVideoStyle === 'dialogue' 
+                    ? `Describe your ${selectedDuration}s video with dialogue... e.g., "John walks into the office. John: 'Good morning everyone!' Sarah: 'Hey John, ready for the meeting?'"`
+                    : `Describe your ${selectedDuration}s video in detail... Include actions, descriptions, settings, and any dialogue`
                   : "Describe the video you want to create... e.g., 'A modern product showcase with smooth transitions'"}
                 className="input-field h-32 resize-none"
               />
               <p className="text-xs text-foreground-secondary">
                 {selectedModel === 'veo3.1_fast' 
-                  ? `Your prompt will be enhanced into ${getClipCount()} separate clips for seamless video generation`
-                  : 'Be as detailed as possible for best results'}
+                  ? veoVideoStyle === 'dialogue'
+                    ? '💡 Include character names and dialogue in quotes. Add descriptions of actions, settings, and emotions. AI will preserve all your details.'
+                    : `💡 Be descriptive! Include actions, settings, characters, colors, and atmosphere. All your details will be preserved and enhanced.`
+                  : '💡 Be as detailed as possible for best results'}
               </p>
             </div>
 
@@ -1734,8 +1945,15 @@ export default function AIVideoPage() {
                                 Clip {index + 1}
                               </span>
                               <span className="text-[10px] text-foreground-secondary">8 sec</span>
+                              {(!clip || clip.trim().length === 0) && (
+                                <span className="text-[10px] text-red-500 font-medium">⚠️ Empty</span>
+                              )}
                             </div>
-                            <p className="text-xs text-foreground-secondary line-clamp-2">{clip}</p>
+                            {clip && clip.trim().length > 0 ? (
+                              <p className="text-xs text-foreground-secondary line-clamp-2">{clip}</p>
+                            ) : (
+                              <p className="text-xs text-red-500 italic">This clip is empty. Click edit to add content.</p>
+                            )}
                           </div>
                           <button
                             onClick={() => {
@@ -1764,29 +1982,6 @@ export default function AIVideoPage() {
                 </p>
               </div>
             )}
-
-            {/* Style Selection */}
-            <div className="space-y-2 mb-6">
-              <label className="text-sm font-medium text-foreground">Visual Style</label>
-              <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                {styles.map((style, index) => (
-                  <button
-                    key={style.id}
-                    onClick={() => setSelectedStyle(style.id)}
-                    style={{ animationDelay: `${index * 50}ms` }}
-                    className={`p-4 rounded-lg border-2 transition-all duration-300 animate-scale-in hover:scale-105 ${
-                      selectedStyle === style.id
-                        ? 'border-primary bg-primary/10 scale-105'
-                        : 'border-border hover:border-primary/50 bg-background-tertiary'
-                    }`}
-                  >
-                    <div className="text-3xl mb-2">{style.emoji}</div>
-                    <div className="text-sm font-medium text-foreground">{style.name}</div>
-                    <div className="text-xs text-foreground-secondary mt-1">{style.description}</div>
-                  </button>
-                ))}
-              </div>
-            </div>
 
             {/* Duration - Only show for non-Veo models */}
             {selectedModel !== 'veo3.1_fast' && (
@@ -1866,54 +2061,6 @@ export default function AIVideoPage() {
                       >
                         <div className="text-sm font-medium text-foreground">{quality.label}</div>
                         <div className="text-xs text-foreground-secondary">{quality.description}</div>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Transition Style */}
-                <div className="space-y-2">
-                  <label className="text-sm font-medium text-foreground flex items-center gap-2">
-                    <Sparkles className="w-4 h-4" />
-                    Transition Style
-                  </label>
-                  <div className="grid grid-cols-4 gap-2">
-                    {transitions.map((trans) => (
-                      <button
-                        key={trans.id}
-                        onClick={() => setTransition(trans.id)}
-                        className={`px-3 py-2 rounded-lg border-2 transition-all duration-300 hover:scale-105 ${
-                          transition === trans.id
-                            ? 'border-primary bg-primary/10'
-                            : 'border-border hover:border-primary/50 bg-background-tertiary'
-                        }`}
-                      >
-                        <div className="text-xl mb-1">{trans.emoji}</div>
-                        <div className="text-xs font-medium text-foreground">{trans.label}</div>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Camera Movement */}
-                <div className="space-y-2">
-                  <label className="text-sm font-medium text-foreground flex items-center gap-2">
-                    <Video className="w-4 h-4" />
-                    Camera Movement
-                  </label>
-                  <div className="grid grid-cols-4 gap-2">
-                    {cameraMovements.map((movement) => (
-                      <button
-                        key={movement.id}
-                        onClick={() => setCameraMovement(movement.id)}
-                        className={`px-3 py-2 rounded-lg border-2 transition-all duration-300 hover:scale-105 ${
-                          cameraMovement === movement.id
-                            ? 'border-primary bg-primary/10'
-                            : 'border-border hover:border-primary/50 bg-background-tertiary'
-                        }`}
-                      >
-                        <div className="text-xl mb-1">{movement.emoji}</div>
-                        <div className="text-xs font-medium text-foreground">{movement.label}</div>
                       </button>
                     ))}
                   </div>
@@ -2242,20 +2389,6 @@ export default function AIVideoPage() {
                   )}
                 </div>
                 )}
-
-                <div className="space-y-2">
-                  <label className="text-sm font-medium text-foreground flex items-center gap-2">
-                    <Type className="w-4 h-4" />
-                    Text Overlay (Optional)
-                  </label>
-                  <input
-                    type="text"
-                    value={textOverlay}
-                    onChange={(e) => setTextOverlay(e.target.value)}
-                    placeholder="Enter text to display in video..."
-                    className="w-full px-4 py-2 bg-background-tertiary border border-border rounded-lg text-foreground placeholder:text-foreground-muted focus:outline-none focus:ring-2 focus:ring-primary/50"
-                  />
-                </div>
               </div>
             </details>
 
@@ -2509,13 +2642,25 @@ export default function AIVideoPage() {
                     </span>
                   </div>
                 </div>
-                <div className="aspect-video bg-background-tertiary rounded-lg overflow-hidden mb-3">
+                <div className="aspect-video bg-background-tertiary rounded-lg overflow-hidden mb-3 relative group">
                   <video 
                     src={generatedVideoUrl} 
                     controls 
                     autoPlay
                     className="w-full h-full object-contain"
                   />
+                  {/* Fullscreen Icon Overlay */}
+                  <button
+                    onClick={() => setVideoViewer({
+                      isOpen: true,
+                      videoUrl: generatedVideoUrl,
+                      prompt: prompt || lastGeneratedPrompt || enhancedScript || lastGeneratedEnhancedScript || 'AI Generated Video'
+                    })}
+                    className="absolute top-3 right-3 w-10 h-10 rounded-full bg-black/50 backdrop-blur-sm hover:bg-black/70 flex items-center justify-center transition-all opacity-0 group-hover:opacity-100 z-10"
+                    title="View fullscreen"
+                  >
+                    <Maximize2 className="w-5 h-5 text-white" />
+                  </button>
                 </div>
                 <div className="grid grid-cols-2 gap-2 mb-3">
                   <button 
@@ -2651,32 +2796,42 @@ export default function AIVideoPage() {
             <ul className="space-y-2 text-sm text-foreground-secondary">
               <li className="flex gap-2 items-start">
                 <span className="text-primary mt-1">•</span>
-                <span>Be specific with your descriptions</span>
+                <span><strong>Be detailed:</strong> Include actions, settings, characters, colors, mood</span>
+              </li>
+              {veoVideoStyle === 'dialogue' && (
+                <li className="flex gap-2 items-start">
+                  <span className="text-primary mt-1">•</span>
+                  <span><strong>Add dialogue:</strong> Name: &quot;what they say&quot; - AI preserves every word</span>
+                </li>
+              )}
+              <li className="flex gap-2 items-start">
+                <span className="text-primary mt-1">•</span>
+                <span><strong>Describe actions:</strong> What characters do, how they move, gestures</span>
               </li>
               <li className="flex gap-2 items-start">
                 <span className="text-primary mt-1">•</span>
-                <span>Mention colors, mood, and style</span>
+                <span><strong>Set the scene:</strong> Location, time of day, atmosphere, lighting</span>
               </li>
               <li className="flex gap-2 items-start">
                 <span className="text-primary mt-1">•</span>
-                <span>Videos typically take 2-5 minutes</span>
+                <span>Videos take 2-5 minutes to generate</span>
               </li>
             </ul>
           </div>
 
           {/* Multi-Clip Workflow Info Card */}
-          {selectedModel === 'veo3.1_fast' && parseInt(selectedDuration) > 8 && (
+          {selectedModel === 'veo3.1_fast' && scriptSections.length > 1 && (
             <div className="card p-6 bg-blue-500/5 border-blue-500/20 animate-fade-in">
               <Film className="w-8 h-8 text-blue-500 mb-3" />
               <h3 className="text-lg font-bold text-foreground mb-2">Multi-Clip Workflow</h3>
               <ul className="space-y-2 text-sm text-foreground-secondary">
                 <li className="flex gap-2 items-start">
                   <span className="text-blue-500 mt-1">1.</span>
-                  <span>Generate {Math.ceil(parseInt(selectedDuration) / 8)} clips</span>
+                  <span>Generate {scriptSections.length} clips (~{Math.ceil(parseInt(selectedDuration) / scriptSections.length)}s each)</span>
                 </li>
                 <li className="flex gap-2 items-start">
                   <span className="text-blue-500 mt-1">2.</span>
-                  <span>Preview each 8-second clip</span>
+                  <span>Preview each clip individually</span>
                 </li>
                 <li className="flex gap-2 items-start">
                   <span className="text-blue-500 mt-1">3.</span>
@@ -2826,7 +2981,7 @@ export default function AIVideoPage() {
                 autoFocus
               />
               <p className="text-xs text-foreground-secondary mt-2">
-                💡 Describe the scene, action, and any dialogue for this 8-second clip
+                💡 Describe the scene, action, and any dialogue for this clip
               </p>
             </div>
 

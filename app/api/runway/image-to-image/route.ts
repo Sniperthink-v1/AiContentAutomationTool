@@ -75,12 +75,9 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Create detailed prompt with style and settings
-    const style = settings?.style || 'photorealistic'
-    const mood = settings?.mood || 'vibrant'
-    const lighting = settings?.lighting || 'natural'
-    
-    let detailedPrompt = `${prompt}. Style: ${style}. Mood: ${mood}. Lighting: ${lighting}. Professional quality, detailed, sharp focus.`
+    // Use the prompt directly - it's already enhanced by the user or Gemini
+    // Adding extra style text dilutes the prompt and causes AI to ignore key details
+    let detailedPrompt = prompt
     
     // Runway API has 1000 character limit for promptText
     if (detailedPrompt.length > 1000) {
@@ -97,9 +94,15 @@ export async function POST(request: NextRequest) {
     
     const ratio = aspectRatioMap[settings?.aspectRatio || '1:1'] || '1024:1024'
 
+    // Runway has 1000 character limit - truncate if needed
+    const truncatedPrompt = detailedPrompt.length > 1000 
+      ? detailedPrompt.substring(0, 997) + '...' 
+      : detailedPrompt
+
     console.log('🎬 Calling Runway API with:', { 
       model: 'gen4_image_turbo',
-      promptLength: detailedPrompt.length,
+      originalPromptLength: detailedPrompt.length,
+      truncatedPromptLength: truncatedPrompt.length,
       ratio,
       hasReferenceImage: true
     })
@@ -114,7 +117,7 @@ export async function POST(request: NextRequest) {
       },
       body: JSON.stringify({
         model: 'gen4_image_turbo',
-        promptText: detailedPrompt,
+        promptText: truncatedPrompt,
         ratio: ratio,
         referenceImages: [{
           uri: sourceImage,
@@ -165,7 +168,7 @@ export async function POST(request: NextRequest) {
       await new Promise(resolve => setTimeout(resolve, 5000)) // Wait 5 seconds
       attempts++
       
-      console.log(`🔄 Poll attempt ${attempts}/${maxAttempts} for task ${taskId}`)
+      console.log(`� Poll attempt ${attempts}/${maxAttempts} for task ${taskId}`)
 
       try {
         const statusResponse = await fetch(`https://api.dev.runwayml.com/v1/tasks/${taskId}`, {
@@ -265,11 +268,11 @@ export async function POST(request: NextRequest) {
       })
 
       // Send notification for successful image generation
-      await notifyPhotoGenerated(parseInt(user.id), prompt.substring(0, 30))
+      await notifyPhotoGenerated(user.id, prompt.substring(0, 30))
       
       // Send low credits warning if below 50
       if (newRemainingCredits < 50) {
-        await notifyLowCredits(parseInt(user.id), newRemainingCredits)
+        await notifyLowCredits(user.id, newRemainingCredits)
       }
     } catch (dbError) {
       await client.query('ROLLBACK')

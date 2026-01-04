@@ -5,6 +5,8 @@ import {
   getInstagramBusinessAccount,
   getInstagramProfile 
 } from '@/lib/instagram';
+import pool from '@/lib/db';
+import { getAuthUser } from '@/lib/middleware';
 
 // GET /api/auth/instagram/callback - Handle OAuth callback
 export async function GET(request: NextRequest) {
@@ -61,8 +63,32 @@ export async function GET(request: NextRequest) {
     const profile = await getInstagramProfile(igUserId, longLivedToken.access_token);
     console.log('Connected Instagram account:', profile.username);
 
-    // TODO: Save to database
-    // For now, we'll store in a cookie (in production, save to database)
+    // Try to get the authenticated user to save integration to database
+    const user = await getAuthUser(request);
+    
+    if (user) {
+      // Save Instagram integration to database for scheduled posts/stories
+      const expiresAt = new Date(Date.now() + longLivedToken.expires_in * 1000);
+      
+      await pool.query(
+        `INSERT INTO social_integrations 
+         (user_id, platform, access_token, token_expires_at, platform_user_id, platform_username, is_active)
+         VALUES ($1, 'instagram', $2, $3, $4, $5, true)
+         ON CONFLICT (user_id, platform) 
+         DO UPDATE SET 
+           access_token = EXCLUDED.access_token,
+           token_expires_at = EXCLUDED.token_expires_at,
+           platform_user_id = EXCLUDED.platform_user_id,
+           platform_username = EXCLUDED.platform_username,
+           is_active = true,
+           updated_at = NOW()`,
+        [user.id, longLivedToken.access_token, expiresAt, igUserId, profile.username]
+      );
+      console.log('Instagram integration saved to database for user:', user.id);
+    } else {
+      console.log('No authenticated user found - Instagram tokens will only be stored in cookies');
+    }
+
     const response = NextResponse.redirect(
       new URL(`/dashboard/settings?success=Connected to Instagram as @${profile.username}`, request.url)
     );

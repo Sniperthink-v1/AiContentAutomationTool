@@ -9,7 +9,12 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
     }
 
-    // Fetch both images and videos, combine and sort by date
+    // Get pagination parameters
+    const { searchParams } = new URL(request.url)
+    const limit = parseInt(searchParams.get('limit') || '50') // Default 50 items
+    const offset = parseInt(searchParams.get('offset') || '0')
+
+    // Fetch both images and videos with LIMIT, combine and sort by date
     const imagesQuery = `
       SELECT 
         id, 
@@ -21,6 +26,8 @@ export async function GET(request: NextRequest) {
         created_at
       FROM ai_images 
       WHERE user_id = $1
+      ORDER BY created_at DESC
+      LIMIT $2 OFFSET $3
     `
     
     const videosQuery = `
@@ -34,11 +41,13 @@ export async function GET(request: NextRequest) {
         created_at
       FROM ai_videos 
       WHERE user_id = $1
+      ORDER BY created_at DESC
+      LIMIT $2 OFFSET $3
     `
 
     const [imagesResult, videosResult] = await Promise.all([
-      pool.query(imagesQuery, [user.id]),
-      pool.query(videosQuery, [user.id])
+      pool.query(imagesQuery, [user.id, limit, offset]),
+      pool.query(videosQuery, [user.id, limit, offset])
     ])
 
     // Combine and sort by created_at descending (newest first)
@@ -47,9 +56,24 @@ export async function GET(request: NextRequest) {
       ...videosResult.rows
     ].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
 
+    // Get total count for pagination
+    const countQuery = `
+      SELECT 
+        (SELECT COUNT(*) FROM ai_images WHERE user_id = $1) as image_count,
+        (SELECT COUNT(*) FROM ai_videos WHERE user_id = $1) as video_count
+    `
+    const countResult = await pool.query(countQuery, [user.id])
+    const totalCount = (countResult.rows[0]?.image_count || 0) + (countResult.rows[0]?.video_count || 0)
+
     return NextResponse.json({
       success: true,
-      media: allMedia
+      media: allMedia,
+      pagination: {
+        total: totalCount,
+        limit,
+        offset,
+        hasMore: offset + allMedia.length < totalCount
+      }
     })
   } catch (error: any) {
     console.error('Error fetching media:', error)

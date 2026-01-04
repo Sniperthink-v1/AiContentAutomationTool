@@ -1,16 +1,28 @@
 import { NextRequest, NextResponse } from 'next/server'
-import Replicate from 'replicate'
+import { GoogleGenAI, Modality } from '@google/genai'
+import { getAuthUser } from '@/lib/middleware'
+import pool from '@/lib/db'
 
 export async function POST(request: NextRequest) {
   try {
     const { prompt, settings, mode, sourceImage } = await request.json()
 
-    console.log('🎨 Image Generation Request:', { 
+    console.log('🎨 Gemini Image Generation Request:', { 
       mode,
       prompt: prompt?.substring(0, 50),
       hasSourceImage: !!sourceImage,
       settings 
     })
+
+    // Get authenticated user first
+    const user = await getAuthUser(request)
+    
+    if (!user) {
+      return NextResponse.json(
+        { success: false, error: 'Unauthorized' },
+        { status: 401 }
+      )
+    }
 
     if (!prompt) {
       return NextResponse.json(
@@ -19,145 +31,207 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Validate source image for image-to-image mode
-    if (mode === 'image-to-image' && !sourceImage) {
+    // Check if API key exists - use the dedicated image generation key
+    const apiKey = process.env.GEMINI_IMAGE_API_KEY || process.env.VEO_API_KEY || process.env.GEMINI_API_KEY
+    if (!apiKey) {
       return NextResponse.json(
-        { error: 'Source image is required for image-to-image generation' },
-        { status: 400 }
-      )
-    }
-
-    // Check if API key exists
-    if (!process.env.REPLICATE_API_KEY) {
-      return NextResponse.json(
-        { error: 'Replicate API key not configured' },
+        { error: 'Gemini API key not configured' },
         { status: 500 }
       )
     }
 
-    // Deduct 2 credits for image generation
-    const creditResponse = await fetch(`${request.nextUrl.origin}/api/credits/deduct`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        actionType: mode === 'image-to-image' ? 'image_to_image' : 'image_generation',
-        creditsUsed: 2,
-        modelUsed: mode === 'image-to-image' ? 'flux-dev' : 'flux-schnell',
-        description: `Image generation: ${prompt.substring(0, 50)}...`
-      })
-    })
+    // Check and deduct 2 credits directly from database
+    const client = await pool.connect()
+    try {
+      await client.query('BEGIN')
 
-    const creditData = await creditResponse.json()
-
-    if (!creditData.success) {
-      return NextResponse.json(
-        { 
-          error: creditData.error || 'Insufficient credits',
-          remaining: creditData.remaining,
-          required: 2
-        },
-        { status: 400 }
+      const creditsResult = await client.query(
+        'SELECT * FROM credits WHERE user_id = $1 FOR UPDATE',
+        [user.id]
       )
-    }
 
-    // Initialize Replicate
-    const replicate = new Replicate({
-      auth: process.env.REPLICATE_API_KEY,
-    })
-
-    // Create detailed prompt with style and settings
-    let detailedPrompt = ''
-    let output: any
-
-    // Map aspect ratio to dimensions
-    const getDimensionsForAspectRatio = (aspectRatio: string, quality: string) => {
-      const baseResolutions: { [key: string]: { width: number, height: number } } = {
-        '1:1': { width: 1024, height: 1024 },
-        '4:5': { width: 896, height: 1120 },
-        '9:16': { width: 768, height: 1365 },
-        '16:9': { width: 1365, height: 768 }
+      if (creditsResult.rows.length === 0) {
+        throw new Error('User credits not found')
       }
+
+      const currentCredits = creditsResult.rows[0]
+      const requiredCredits = 2
+
+      if (currentCredits.remaining_credits < requiredCredits) {
+        await client.query('ROLLBACK')
+        return NextResponse.json(
+          { 
+            error: `Insufficient credits. You need ${requiredCredits} credits.`,
+            remaining: currentCredits.remaining_credits,
+            required: requiredCredits
+          },
+          { status: 400 }
+        )
+      }
+
+      const newUsedCredits = currentCredits.used_credits + requiredCredits
+      const newRemainingCredits = currentCredits.total_credits - newUsedCredits
+
+      await client.query(
+        `UPDATE credits 
+         SET used_credits = $1, remaining_credits = $2
+         WHERE user_id = $3`,
+        [newUsedCredits, newRemainingCredits, user.id]
+      )
+
+      await client.query(
+        `INSERT INTO credit_transactions 
+         (user_id, action_type, credits_used, model_used, description)
+         VALUES ($1, $2, $3, $4, $5)`,
+        [user.id, mode === 'image-to-image' ? 'image_to_image' : 'image_generation', requiredCredits, 'gemini-imagen-3', `Image generation: ${prompt.substring(0, 50)}...`]
+      )
+
+      await client.query('COMMIT')
       
-      // Scale up for higher quality
-      const dimensions = baseResolutions[aspectRatio] || baseResolutions['1:1']
-      if (quality === 'ultra') {
-        return { width: Math.round(dimensions.width * 1.5), height: Math.round(dimensions.height * 1.5) }
-      } else if (quality === 'high') {
-        return { width: Math.round(dimensions.width * 1.2), height: Math.round(dimensions.height * 1.2) }
+      console.log('💳 Credits deducted successfully:', {
+        remaining: newRemainingCredits,
+        used: requiredCredits
+      })
+      
+    } catch (error: any) {
+      await client.query('ROLLBACK')
+      throw error
+    } finally {
+      client.release()
+    }
+
+    // Initialize Google GenAI client
+    const genaiClient = new GoogleGenAI({ apiKey })
+
+    // Use the prompt exactly as provided by the user - no style modifications
+    const enhancedPrompt = prompt
+
+    console.log('🎨 Generating image with Imagen 3...')
+    console.log('Prompt:', enhancedPrompt.substring(0, 100))
+
+    let imageData: string = ''
+
+    if (mode === 'image-to-image' && sourceImage) {
+      // Image-to-Image mode using Gemini's multimodal capabilities
+      // Use gemini-2.0-flash for image editing with vision
+      
+      // Extract base64 data from data URL
+      let imageBase64 = sourceImage
+      let mimeType = 'image/png'
+      
+      if (sourceImage.startsWith('data:')) {
+        const matches = sourceImage.match(/^data:([^;]+);base64,(.+)$/)
+        if (matches) {
+          mimeType = matches[1]
+          imageBase64 = matches[2]
+        }
       }
-      return dimensions
-    }
 
-    const aspectRatio = settings?.aspectRatio || '1:1'
-    const quality = settings?.quality || 'high'
-    const dimensions = getDimensionsForAspectRatio(aspectRatio, quality)
-
-    if (mode === 'image-to-image') {
-      // Image-to-Image transformation mode
-      detailedPrompt = `${prompt}. Style: ${settings?.style || 'photorealistic'}. Mood: ${settings?.mood || 'vibrant'}. Lighting: ${settings?.lighting || 'natural'}. High quality, detailed, professional photography.`
-
-      // Use FLUX dev for image-to-image (supports image input)
-      output = await replicate.run(
-        "black-forest-labs/flux-dev",
-        {
-          input: {
-            prompt: detailedPrompt,
-            image: sourceImage, // Base64 data URL
-            num_inference_steps: quality === 'ultra' ? 50 : quality === 'high' ? 40 : 30,
-            guidance_scale: 7.5,
-            num_outputs: 1,
-            output_format: "png",
-            output_quality: quality === 'ultra' ? 100 : quality === 'high' ? 90 : 80,
-            // Add aspect ratio control for image-to-image
-            aspect_ratio: aspectRatio,
-          }
+      // For image-to-image, we use Gemini's image generation with reference
+      const response = await genaiClient.models.generateContent({
+        model: 'gemini-2.0-flash-exp',
+        contents: [{
+          role: 'user',
+          parts: [
+            { 
+              inlineData: {
+                mimeType: mimeType,
+                data: imageBase64
+              }
+            },
+            { 
+              text: `Transform this image based on the following description. Keep the main subject but apply these changes: ${enhancedPrompt}. Generate a new image.`
+            }
+          ]
+        }],
+        config: {
+          responseModalities: [Modality.TEXT, Modality.IMAGE],
         }
-      )
+      })
+
+      // Extract image from response
+      const parts = response.candidates?.[0]?.content?.parts || []
+      let foundImage = false
+      
+      for (const part of parts) {
+        if (part.inlineData) {
+          imageData = `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`
+          foundImage = true
+          break
+        }
+      }
+
+      if (!foundImage) {
+        // Fallback: Generate new image with Imagen if editing didn't work
+        console.log('Image editing not available, falling back to text-to-image generation')
+        const imagenResponse = await genaiClient.models.generateImages({
+          model: 'imagen-3.0-fast-generate-001', // Imagen 3 Fast - available model
+          prompt: enhancedPrompt,
+          config: {
+            numberOfImages: 1,
+            aspectRatio: settings?.aspectRatio === '16:9' ? '16:9' : 
+                        settings?.aspectRatio === '9:16' ? '9:16' : 
+                        settings?.aspectRatio === '4:5' ? '3:4' : '1:1',
+          }
+        })
+
+        if (!imagenResponse.generatedImages || imagenResponse.generatedImages.length === 0) {
+          throw new Error('No image generated')
+        }
+
+        const generatedImage = imagenResponse.generatedImages[0]
+        imageData = `data:image/png;base64,${generatedImage.image?.imageBytes}`
+      }
+
     } else {
-      // Text-to-Image generation mode
-      detailedPrompt = `${prompt}. Style: ${settings?.style || 'photorealistic'}. Mood: ${settings?.mood || 'vibrant'}. Lighting: ${settings?.lighting || 'natural'}. Composition: ${settings?.composition || 'centered'}. Resolution: ${quality === 'ultra' ? '4K' : quality === 'high' ? '1080p' : '720p'}. High quality, detailed, professional photography.`
-
-      // Use FLUX schnell for fast text-to-image generation
-      output = await replicate.run(
-        "black-forest-labs/flux-schnell",
-        {
-          input: {
-            prompt: detailedPrompt,
-            aspect_ratio: aspectRatio,
-            num_outputs: 1,
-            output_format: "png",
-            output_quality: quality === 'ultra' ? 100 : quality === 'high' ? 90 : 80,
-          }
+      // Text-to-Image mode using Imagen 3 Fast
+      const response = await genaiClient.models.generateImages({
+        model: 'imagen-3.0-fast-generate-001', // Imagen 3 Fast - available model
+        prompt: enhancedPrompt,
+        config: {
+          numberOfImages: 1,
+          aspectRatio: settings?.aspectRatio === '16:9' ? '16:9' : 
+                      settings?.aspectRatio === '9:16' ? '9:16' : 
+                      settings?.aspectRatio === '4:5' ? '3:4' : '1:1',
         }
-      )
+      })
+
+      console.log('Imagen response received')
+
+      if (!response.generatedImages || response.generatedImages.length === 0) {
+        // Check if there's a filter reason
+        const filterReason = (response as any).filterReason
+        if (filterReason) {
+          return NextResponse.json(
+            { 
+              error: 'Image generation blocked by safety filters',
+              message: `Content was filtered: ${filterReason}. Please try a different prompt.`
+            },
+            { status: 400 }
+          )
+        }
+        throw new Error('No image generated - the model returned empty results')
+      }
+
+      const generatedImage = response.generatedImages[0]
+      
+      if (!generatedImage.image?.imageBytes) {
+        throw new Error('Generated image has no data')
+      }
+
+      imageData = `data:image/png;base64,${generatedImage.image.imageBytes}`
     }
 
-    // Replicate returns an array of image URLs
-    if (!output || !Array.isArray(output) || output.length === 0) {
-      return NextResponse.json(
-        { 
-          error: 'No image generated', 
-          message: 'The API did not return an image'
-        },
-        { status: 500 }
-      )
-    }
-
-    const imageUrl = output[0] // Get the first generated image URL
-
-    // Fetch the image and convert to base64
-    const imageResponse = await fetch(imageUrl)
-    const imageBuffer = await imageResponse.arrayBuffer()
-    const base64Image = Buffer.from(imageBuffer).toString('base64')
-    const imageData = `data:image/png;base64,${base64Image}`
+    console.log('✅ Image generated successfully')
 
     return NextResponse.json({
       success: true,
       prompt: prompt,
-      enhancedPrompt: detailedPrompt,
+      enhancedPrompt: enhancedPrompt,
       imageData: imageData,
       settings: settings,
       mode: mode || 'text-to-image',
+      model: 'gemini-imagen-3',
       timestamp: new Date().toISOString()
     })
 
@@ -168,6 +242,27 @@ export async function POST(request: NextRequest) {
       stack: error.stack,
       name: error.name
     })
+
+    // Handle specific error types
+    if (error.message?.includes('SAFETY') || error.message?.includes('blocked')) {
+      return NextResponse.json(
+        { 
+          error: 'Content blocked by safety filters',
+          message: 'Your prompt was blocked by safety filters. Please try a different description.'
+        },
+        { status: 400 }
+      )
+    }
+
+    if (error.message?.includes('quota') || error.message?.includes('rate')) {
+      return NextResponse.json(
+        { 
+          error: 'API rate limit reached',
+          message: 'Too many requests. Please wait a moment and try again.'
+        },
+        { status: 429 }
+      )
+    }
     
     return NextResponse.json(
       { 

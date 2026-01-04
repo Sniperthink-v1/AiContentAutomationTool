@@ -12,6 +12,7 @@ interface SavedSong {
   tags: string
   createdAt: string
   modelName: string
+  prompt?: string
 }
 
 export default function MySongsPage() {
@@ -194,6 +195,13 @@ export default function MySongsPage() {
                         </span>
                       ))}
                     </div>
+                  )}
+
+                  {/* Prompt Display */}
+                  {song.prompt && (
+                    <p className="text-xs text-foreground-secondary mb-3 line-clamp-2" title={song.prompt}>
+                      <span className="font-medium">Prompt:</span> {song.prompt}
+                    </p>
                   )}
 
                   {/* Audio Player */}
