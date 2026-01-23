@@ -1,6 +1,8 @@
 // Instagram Graph API Integration
 // Documentation: https://developers.facebook.com/docs/instagram-api
 
+import pool from './db';
+
 const GRAPH_API_VERSION = process.env.GRAPH_API_VERSION || 'v24.0';
 const GRAPH_API_BASE = `https://graph.facebook.com/${GRAPH_API_VERSION}`;
 
@@ -42,6 +44,45 @@ export interface InstagramInsights {
   profile_views?: number;
 }
 
+// Get Instagram access token for a specific user from database
+export async function getInstagramAccessToken(userId: string): Promise<{ accessToken: string; igUserId: string } | null> {
+  try {
+    const result = await pool.query(
+      `SELECT access_token, platform_user_id, token_expires_at 
+       FROM social_integrations 
+       WHERE user_id = $1 AND platform = 'instagram' AND is_active = true`,
+      [userId]
+    );
+
+    if (result.rows.length === 0) {
+      return null;
+    }
+
+    const integration = result.rows[0];
+    const now = new Date();
+    const expiresAt = new Date(integration.token_expires_at);
+
+    // Check if token is expired
+    if (expiresAt <= now) {
+      console.error('Instagram token expired for user:', userId);
+      // Mark as inactive
+      await pool.query(
+        "UPDATE social_integrations SET is_active = false WHERE user_id = $1 AND platform = 'instagram'",
+        [userId]
+      );
+      return null;
+    }
+
+    return {
+      accessToken: integration.access_token,
+      igUserId: integration.platform_user_id
+    };
+  } catch (error) {
+    console.error('Failed to get Instagram access token:', error);
+    return null;
+  }
+}
+
 // Get Instagram OAuth URL for login
 export function getInstagramAuthUrl(): string {
   const appId = process.env.INSTAGRAM_APP_ID;
@@ -64,11 +105,18 @@ export function getInstagramAuthUrl(): string {
     'business_management',
   ].join(',');
 
+  // Generate random state for security
+  const state = Math.random().toString(36).substring(2, 15);
+
+  // Force Facebook to show ALL permissions dialog with rerequest
   const authUrl = `https://www.facebook.com/${GRAPH_API_VERSION}/dialog/oauth?` +
     `client_id=${appId}` +
     `&redirect_uri=${encodeURIComponent(redirectUri || '')}` +
     `&scope=${scopes}` +
-    `&response_type=code`;
+    `&response_type=code` +
+    `&auth_type=rerequest` +
+    `&state=${state}` +
+    `&return_scopes=true`;
   
   console.log('Full Auth URL:', authUrl);
   
@@ -131,7 +179,13 @@ export async function getLongLivedToken(shortLivedToken: string): Promise<{
     throw new Error(error.error?.message || 'Failed to get long-lived token');
   }
 
-  return response.json();
+  const data = await response.json();
+  if (!Number.isFinite(Number(data.expires_in))) {
+    // Default to 60 days if API omits expires_in.
+    data.expires_in = 60 * 24 * 60 * 60;
+    console.warn('Long-lived token missing expires_in, defaulting to 60 days');
+  }
+  return data;
 }
 
 // Get Instagram Business Account ID from Facebook Page
@@ -191,7 +245,7 @@ export async function getInstagramProfile(
   igUserId: string,
   accessToken: string
 ): Promise<InstagramUser> {
-  const fields = 'id,username,name,account_type,profile_picture_url,followers_count,follows_count,media_count';
+  const fields = 'id,username,name,profile_picture_url,followers_count,follows_count,media_count';
   
   const response = await fetch(
     `${GRAPH_API_BASE}/${igUserId}?fields=${fields}&access_token=${accessToken}`
@@ -232,7 +286,7 @@ export async function getInstagramInsights(
   accessToken: string,
   period: 'day' | 'week' | 'days_28' = 'day'
 ): Promise<InstagramInsights> {
-  const metrics = 'impressions,reach,profile_views';
+  const metrics = 'reach,profile_views,accounts_engaged';
   
   const response = await fetch(
     `${GRAPH_API_BASE}/${igUserId}/insights?metric=${metrics}&period=${period}&access_token=${accessToken}`
@@ -247,12 +301,61 @@ export async function getInstagramInsights(
   const insights: InstagramInsights = {};
   
   data.data?.forEach((item: any) => {
-    if (item.name === 'impressions') insights.impressions = item.values[0]?.value;
-    if (item.name === 'reach') insights.reach = item.values[0]?.value;
-    if (item.name === 'profile_views') insights.profile_views = item.values[0]?.value;
+    const total = (item.values || []).reduce(
+      (sum: number, entry: any) => sum + (Number(entry.value) || 0),
+      0
+    );
+    if (item.name === 'reach') insights.reach = total;
+    if (item.name === 'profile_views') insights.profile_views = total;
+    if (item.name === 'accounts_engaged') insights.impressions = total;
   });
 
   return insights;
+}
+
+export async function getInstagramAudienceDemographics(
+  igUserId: string,
+  accessToken: string
+): Promise<Array<{ age: string; male: number; female: number }>> {
+  const response = await fetch(
+    `${GRAPH_API_BASE}/${igUserId}/insights?metric=audience_gender_age&period=lifetime&access_token=${accessToken}`
+  );
+
+  if (!response.ok) {
+    return [];
+  }
+
+  const data = await response.json();
+  const value = data?.data?.[0]?.values?.[0]?.value || {};
+
+  const buckets: Record<string, { male: number; female: number }> = {
+    '13-17': { male: 0, female: 0 },
+    '18-24': { male: 0, female: 0 },
+    '25-34': { male: 0, female: 0 },
+    '35-44': { male: 0, female: 0 },
+    '45-54': { male: 0, female: 0 },
+    '55-64': { male: 0, female: 0 },
+    '65+': { male: 0, female: 0 },
+  };
+
+  Object.entries(value).forEach(([key, count]) => {
+    const [gender, age] = key.split('.');
+    if (!gender || !age || !buckets[age]) {
+      return;
+    }
+    if (gender === 'M') {
+      buckets[age].male += Number(count) || 0;
+    }
+    if (gender === 'F') {
+      buckets[age].female += Number(count) || 0;
+    }
+  });
+
+  return Object.entries(buckets).map(([age, counts]) => ({
+    age,
+    male: counts.male,
+    female: counts.female,
+  }));
 }
 
 // ==================== POSTING CONTENT ====================

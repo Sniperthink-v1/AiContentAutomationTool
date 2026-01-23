@@ -1,32 +1,66 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { cookies } from 'next/headers';
+import pool from '@/lib/db';
+import { getAuthUser } from '@/lib/middleware';
 
-// GET /api/instagram/status - Check if Instagram is connected
+// GET /api/instagram/status - Check Instagram connection status
 export async function GET(request: NextRequest) {
   try {
-    const cookieStore = await cookies();
-    const accessToken = cookieStore.get('ig_access_token')?.value;
-    const igUserId = cookieStore.get('ig_user_id')?.value;
-    const igUsername = cookieStore.get('ig_username')?.value;
+    // Get authenticated user
+    const user = await getAuthUser(request);
+    
+    if (!user) {
+      return NextResponse.json(
+        { success: false, error: 'Not authenticated', connected: false },
+        { status: 401 }
+      );
+    }
 
-    if (!accessToken || !igUserId) {
-      return NextResponse.json({
-        connected: false,
-        username: null,
-      });
+    // Check for Instagram integration in database
+    const result = await pool.query(
+      `SELECT platform_username, platform_user_id, token_expires_at, is_active
+       FROM social_integrations 
+       WHERE user_id = $1 AND platform = 'instagram' AND is_active = true`,
+      [user.id]
+    );
+
+    if (result.rows.length > 0) {
+      const integration = result.rows[0];
+      const now = new Date();
+      const expiresAt = new Date(integration.token_expires_at);
+      
+      // Check if token is still valid
+      if (expiresAt > now) {
+        return NextResponse.json({
+          success: true,
+          connected: true,
+          username: integration.platform_username,
+          expiresAt: integration.token_expires_at
+        });
+      } else {
+        // Token expired - mark as inactive
+        await pool.query(
+          "UPDATE social_integrations SET is_active = false WHERE user_id = $1 AND platform = 'instagram'",
+          [user.id]
+        );
+        
+        return NextResponse.json({
+          success: true,
+          connected: false,
+          error: 'Instagram token expired - please reconnect'
+        });
+      }
     }
 
     return NextResponse.json({
-      connected: true,
-      username: igUsername || null,
-      userId: igUserId,
+      success: true,
+      connected: false
     });
 
   } catch (error) {
-    console.error('Instagram status error:', error);
-    return NextResponse.json({
-      connected: false,
-      username: null,
-    });
+    console.error('Instagram status check error:', error);
+    return NextResponse.json(
+      { success: false, error: 'Failed to check Instagram status', connected: false },
+      { status: 500 }
+    );
   }
 }

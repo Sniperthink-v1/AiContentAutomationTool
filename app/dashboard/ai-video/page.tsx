@@ -27,7 +27,8 @@ import {
   Film,
   ZoomIn,
   Maximize2,
-  Info
+  Info,
+  Mic
 } from 'lucide-react'
 import { useToast } from '@/lib/components/Toast'
 
@@ -148,12 +149,35 @@ export default function AIVideoPage() {
   const [savedSongs, setSavedSongs] = useState<any[]>([])
   const [selectedSongUrl, setSelectedSongUrl] = useState('')
   const [voiceoverFile, setVoiceoverFile] = useState<File | null>(null)
+  
+  // Voice cloning states
+  const [enableVoiceCloning, setEnableVoiceCloning] = useState(false)
+  const [voiceCloneMode, setVoiceCloneMode] = useState<'text-to-speech' | 'speech-to-speech'>('text-to-speech')
+  const [selectedVoicePreset, setSelectedVoicePreset] = useState('Maya')
+  const [voiceCloneText, setVoiceCloneText] = useState('')
+  const [sourceAudioForCloning, setSourceAudioForCloning] = useState<File | null>(null)
+  const [sourceAudioForCloningUrl, setSourceAudioForCloningUrl] = useState('')
+  const [clonedAudioUrl, setClonedAudioUrl] = useState('')
+  const [isGeneratingVoice, setIsGeneratingVoice] = useState(false)
+  const [useOwnVoice, setUseOwnVoice] = useState(false) // Use user's own voice instead of preset
+  
+  // Available voice presets from ElevenLabs API
+  const VOICE_PRESETS = [
+    { name: 'Rachel', description: 'American female, calm & clear' },
+    { name: 'Domi', description: 'American female, strong' },
+    { name: 'Bella', description: 'American female, soft' },
+    { name: 'Antoni', description: 'American male, well-rounded' },
+    { name: 'Elli', description: 'American female, emotional' },
+    { name: 'Josh', description: 'American male, deep' },
+    { name: 'Arnold', description: 'American male, strong' },
+    { name: 'Adam', description: 'American male, deep' },
+    { name: 'Sam', description: 'American male, raspy' },
+  ]
   const [voiceoverUrl, setVoiceoverUrl] = useState('')
   const [soundEffectPrompt, setSoundEffectPrompt] = useState('')
   const [customAudioFile, setCustomAudioFile] = useState<File | null>(null)
   const [customAudioUrl, setCustomAudioUrl] = useState('')
   const [audioVolume, setAudioVolume] = useState(0.8)
-  const [enableVoiceCloning, setEnableVoiceCloning] = useState(true)
   
   // Live recording states
   const [isRecording, setIsRecording] = useState(false)
@@ -161,6 +185,19 @@ export default function AIVideoPage() {
   const [mediaRecorder, setMediaRecorder] = useState<MediaRecorder | null>(null)
   const [recordedChunks, setRecordedChunks] = useState<Blob[]>([])
   const [recordingMode, setRecordingMode] = useState<'upload' | 'record'>('upload')
+  
+  // Voice cloning recording states
+  const [isRecordingVoice, setIsRecordingVoice] = useState(false)
+  const [isRecordingSource, setIsRecordingSource] = useState(false)
+  const [voiceRecorder, setVoiceRecorder] = useState<MediaRecorder | null>(null)
+  const [recordingType, setRecordingType] = useState<'voice' | 'source' | null>(null)
+  
+  // Voice clone testing flow states
+  const [voiceCloneStep, setVoiceCloneStep] = useState<'record' | 'test' | 'ready'>('record')
+  const [testVoiceText, setTestVoiceText] = useState('')
+  const [testVoiceAudioUrl, setTestVoiceAudioUrl] = useState('')
+  const [isTestingVoice, setIsTestingVoice] = useState(false)
+  const [voiceCloneConfirmed, setVoiceCloneConfirmed] = useState(false)
   
   // Generation progress states
   const [generationProgress, setGenerationProgress] = useState(0)
@@ -201,23 +238,17 @@ export default function AIVideoPage() {
   }, [])
 
   // Auto-adjust duration when switching between models
-  // veo3.1_fast (text-to-video without audio OR with audio) uses 8/16/24/32 second clips
-  // gen4_turbo (image-to-video without audio) uses 5/10/15 second durations
+  // All modes now use Gemini Veo 3.1 Fast with 8/16/24/32 second clips
   useEffect(() => {
-    const isVeoModel = audioCategory === 'with-audio' || videoInputType === 'text-to-video'
     const veoDurations = ['8', '16', '24', '32']
-    const gen4Durations = ['5', '10', '15']
     
-    if (isVeoModel && !veoDurations.includes(selectedDuration)) {
-      // Switching to Veo model but duration is not valid for Veo
+    if (!veoDurations.includes(selectedDuration)) {
+      // Ensure duration is valid for Veo
       setSelectedDuration('8')
-      // Reset enhanced scripts when model changes
+      // Reset enhanced scripts when mode changes
       setShowEnhancedScript(false)
       setEnhancedScript('')
       setScriptSections([])
-    } else if (!isVeoModel && !gen4Durations.includes(selectedDuration)) {
-      // Switching to gen4_turbo but duration is not valid for it
-      setSelectedDuration('5')
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [audioCategory, videoInputType])
@@ -273,24 +304,12 @@ export default function AIVideoPage() {
   }
 
   // Video models with their pricing - organized by category
+  // All modes now use Gemini Veo 3.1 Fast
   const getPricingInfo = () => {
-    const isWithAudio = audioCategory === 'with-audio'
-    const isImageToVideo = videoInputType === 'image-to-video'
     const is1080p = selectedQualityTier === '1080p'
     
-    if (!isWithAudio) {
-      // Without Audio - Runway API
-      if (isImageToVideo) {
-        // Image to Video - Runway Gen4 Turbo
-        return { creditsPerSecond: is1080p ? 6 : 5, api: 'runway', model: 'gen4_turbo' }
-      } else {
-        // Text to Video - Runway Veo 3.1 Fast (no audio)
-        return { creditsPerSecond: is1080p ? 16 : 15, api: 'runway', model: 'veo3.1_fast' }
-      }
-    } else {
-      // With Audio - Gemini Veo 3.1
-      return { creditsPerSecond: is1080p ? 16 : 15, api: 'gemini', model: 'veo3.1_fast' }
-    }
+    // All modes use Gemini Veo 3.1 Fast - 15 credits/sec (16 for 1080p)
+    return { creditsPerSecond: is1080p ? 16 : 15, api: 'gemini', model: 'veo3.1_fast' }
   }
   
   const currentPricing = getPricingInfo()
@@ -326,9 +345,8 @@ export default function AIVideoPage() {
     }
   ]
   
-  // Check if we're using Veo 3.1
+  // Check if we're using Veo 3.1 (all modes now use Veo)
   const isUsingVeo = selectedModel === 'veo3.1_fast'
-  const isUsingRunway = currentPricing.api === 'runway'
 
   // Live voice recording functions
   const startRecording = async () => {
@@ -459,9 +477,14 @@ export default function AIVideoPage() {
   }
 
   // Calculate clip count for enhancement (always splits into 8-second clips)
+  // Cap at 3 clips maximum for better cohesion
   const getClipCountForEnhancement = () => {
     if (isUsingVeo) {
-      return Math.ceil(parseInt(selectedDuration) / 8)
+      const duration = parseInt(selectedDuration)
+      // Ensure duration is valid (8, 16, 24, or 32)
+      const validDuration = [8, 16, 24, 32].includes(duration) ? duration : 8
+      // Cap at 3 clips (24s max) for better story cohesion
+      return Math.min(Math.ceil(validDuration / 8), 3)
     }
     return 1
   }
@@ -704,22 +727,6 @@ export default function AIVideoPage() {
       }
     }
 
-    // Validate audio options (only for without-audio category with non-Veo)
-    if (audioCategory === 'without-audio' && currentPricing.api === 'runway') {
-      if (audioMode === 'voiceover' && !voiceoverFile) {
-        showToast('Please upload or record a voiceover file.', 'warning')
-        return
-      }
-      if (audioMode === 'sound-effects' && !soundEffectPrompt.trim()) {
-        showToast('Please enter a description for the sound effect.', 'warning')
-        return
-      }
-      if (audioMode === 'custom' && !customAudioFile) {
-        showToast('Please upload a custom audio file.', 'warning')
-        return
-      }
-    }
-
     // Check credits
     const creditCost = calculateCreditCost()
     if (credits.remaining_credits < creditCost) {
@@ -732,14 +739,8 @@ export default function AIVideoPage() {
     setGenerationStatus('Generating video...')
 
     try {
-      // Different flow based on API
-      if (currentPricing.api === 'gemini') {
-        // Use Gemini API for Veo 3.1 with audio
-        await handleVeo31Generation()
-      } else {
-        // Use Runway API for all without-audio modes (both image-to-video and text-to-video)
-        await handleRunwayGeneration()
-      }
+      // All modes now use Gemini Veo 3.1 Fast
+      await handleVeo31Generation()
 
     } catch (error) {
       console.error('Generation error:', error)
@@ -779,9 +780,21 @@ export default function AIVideoPage() {
       console.warn('Image-to-video mode selected but no image uploaded!')
     }
 
-    console.log(`Starting generation with ${scriptSections.length || 1} clips, inputType: ${videoInputType}, imageUsageMode: ${imageUsageMode}, hasImage: ${!!sourceImageBase64}`)
+    console.log(`Starting generation with ${scriptSections.length || 1} clips, inputType: ${videoInputType}, imageUsageMode: ${imageUsageMode}, hasImage: ${!!sourceImageBase64}, audioCategory: ${audioCategory}, customVoice: ${enableVoiceCloning}`)
 
+    // Determine audio settings
+    let audioUrlToSync = undefined
+    
+    // If custom voice is enabled and audio is generated (for without-audio mode)
+    // We'll sync the audio after video generation
+    if (enableVoiceCloning && clonedAudioUrl && audioCategory === 'without-audio') {
+      audioUrlToSync = clonedAudioUrl
+      console.log('🎤 Custom voice audio ready - will sync after video generation')
+    }
+    
     // Start video generation
+    // For without-audio: generate silent video, then sync custom audio if provided
+    // For with-audio: Gemini generates video with native audio
     const response = await fetch('/api/gemini/generate-video', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -793,7 +806,9 @@ export default function AIVideoPage() {
         duration: totalDuration,
         sourceImage: sourceImageBase64 || undefined,
         inputType: videoInputType,
-        imageUsageMode: imageUsageMode // 'reference' = style guide, 'animate' = put image in video
+        imageUsageMode: imageUsageMode, // 'reference' = style guide, 'animate' = put image in video
+        withAudio: audioCategory === 'with-audio', // Whether to include native audio
+        customAudioUrl: undefined // Don't pass here - we'll sync after generation for without-audio mode
       })
     })
 
@@ -816,6 +831,26 @@ export default function AIVideoPage() {
         remaining_credits: data.remainingCredits,
         used_credits: prev.total_credits - data.remainingCredits
       }))
+    }
+
+    // Check if videos are already complete (sequential generation with frame extraction)
+    if (data.allComplete && data.videoUrls && data.videoUrls.length > 0) {
+      console.log('Videos already complete from sequential generation!')
+      
+      // Update all clips with their video URLs
+      setGeneratedClips(prev => prev.map((clip, idx) => ({
+        ...clip,
+        status: data.videoUrls[idx] ? 'complete' as const : 'failed' as const,
+        videoUrl: data.videoUrls[idx] || ''
+      })))
+      
+      setGenerationProgress(100)
+      setGenerationStatus('Clips ready for review')
+      setClipGenerationPhase('preview') // Show preview phase with edit options
+      setIsGenerating(false)
+      
+      showAndSaveToast('Clips Generated', `${data.videoUrls.length} clips generated with smooth transitions! Review and edit before combining.`, 'success', '/dashboard/ai-video')
+      return
     }
 
     // Poll for completion - handle multiple operations
@@ -862,19 +897,52 @@ export default function AIVideoPage() {
             return
           } else {
             // Single clip - go directly to complete
-            const singleVideoUrl = statusData.videoUrl || statusData.videoUrls?.[0]
-            if (singleVideoUrl) {
+            let finalVideoUrl = statusData.videoUrl || statusData.videoUrls?.[0]
+            
+            if (finalVideoUrl) {
+              // If custom voice is enabled for without-audio mode, sync the audio now
+              if (enableVoiceCloning && clonedAudioUrl && audioCategory === 'without-audio') {
+                console.log('🎤 Syncing custom voice audio with generated video...')
+                setGenerationStatus('Syncing your voice with video...')
+                
+                try {
+                  const syncResponse = await fetch('/api/video/sync-audio', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                      videoUrl: finalVideoUrl,
+                      customAudioUrl: clonedAudioUrl,
+                      enableLipSync: false
+                    })
+                  })
+                  
+                  const syncData = await syncResponse.json()
+                  
+                  if (syncData.success && syncData.videoUrl) {
+                    finalVideoUrl = syncData.videoUrl
+                    console.log('✅ Custom voice synced successfully!')
+                    showToast('Your voice has been added to the video!', 'success')
+                  } else {
+                    console.warn('⚠️ Audio sync failed:', syncData.error)
+                    showToast('Video generated but voice sync failed. Using silent video.', 'warning')
+                  }
+                } catch (syncError) {
+                  console.error('Audio sync error:', syncError)
+                  showToast('Video generated but voice sync failed. Using silent video.', 'warning')
+                }
+              }
+              
               setGeneratedClips([{
                 index: 0,
-                videoUrl: singleVideoUrl,
+                videoUrl: finalVideoUrl,
                 prompt: enhancedScript || prompt,
                 status: 'complete'
               }])
-              setGeneratedVideoUrl(singleVideoUrl)
+              setGeneratedVideoUrl(finalVideoUrl)
               setClipGenerationPhase('complete')
               
               // Save to drafts only (user can manually save to My Media)
-              await saveToDraftsWithData(singleVideoUrl, prompt, enhancedScript)
+              await saveToDraftsWithData(finalVideoUrl, prompt, enhancedScript)
               
               // Clear prompts
               setPrompt('')
@@ -925,64 +993,6 @@ export default function AIVideoPage() {
     await pollVeoStatus()
   }
 
-  // Handle Runway API generation (for without-audio modes - both image-to-video and text-to-video)
-  const handleRunwayGeneration = async () => {
-    setGenerationProgress(10)
-    let sourceImageBase64 = ''
-    
-    // Only get image for image-to-video mode
-    if (videoInputType === 'image-to-video' && referenceImage) {
-      sourceImageBase64 = await fileToBase64(referenceImage)
-    }
-
-    setGenerationProgress(20)
-    setGenerationStatus('Creating video...')
-    
-    // Use the correct model based on input type
-    // gen4_turbo for image-to-video, veo3.1_fast for text-to-video
-    const modelToUse = currentPricing.model
-    
-    const videoResponse = await fetch('/api/runway/generate-video', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        prompt: enhancedScript || prompt,
-        model: modelToUse,
-        duration: parseInt(selectedDuration),
-        sourceImage: sourceImageBase64 || undefined,
-        aspectRatio: aspectRatio
-      })
-    })
-
-    const videoData = await videoResponse.json()
-
-    if (!videoData.success) {
-      throw new Error(videoData.message || videoData.error || 'Failed to generate video')
-    }
-
-    setGenerationProgress(80)
-    const finalVideoUrl = videoData.videoUrl
-
-    // Deduct credits (credits already deducted by API, just update local state)
-    // Note: The Runway API already deducts credits, so we just refresh the balance
-    await fetchCredits()
-
-    // Success!
-    setGeneratedVideoUrl(finalVideoUrl)
-    setGenerationStatus('complete')
-    setGenerationProgress(100)
-    
-    // Clear prompts after successful generation
-    setPrompt('')
-    setEnhancedScript('')
-    setShowEnhancedScript(false)
-    
-    // Save to drafts only (user can manually save to My Media)
-    await saveToDraftsWithData(finalVideoUrl, prompt, enhancedScript)
-    
-    setIsGenerating(false)
-  }
-
   // Helper function to convert file to base64
   const fileToBase64 = (file: File): Promise<string> => {
     return new Promise((resolve, reject) => {
@@ -991,6 +1001,223 @@ export default function AIVideoPage() {
       reader.onload = () => resolve(reader.result as string)
       reader.onerror = error => reject(error)
     })
+  }
+  
+  // Handle voice cloning (text-to-speech or speech-to-speech)
+  const handleVoiceCloning = async () => {
+    // For AI Voice TTS mode
+    if (!useOwnVoice && voiceCloneMode === 'text-to-speech' && !voiceCloneText.trim()) {
+      showToast('Please enter the text you want to say', 'warning')
+      return
+    }
+    
+    // Own Voice requires voice clone to be confirmed first
+    if (useOwnVoice && !voiceCloneConfirmed) {
+      showToast('Please test and confirm your voice clone first', 'warning')
+      return
+    }
+
+    // Own Voice also requires text for voice cloning TTS
+    if (useOwnVoice && !voiceCloneText.trim()) {
+      showToast('Please enter the text you want to say in your cloned voice', 'warning')
+      return
+    }
+    
+    if (!useOwnVoice && voiceCloneMode === 'speech-to-speech' && !sourceAudioForCloningUrl) {
+      showToast('Please upload audio first', 'warning')
+      return
+    }
+    
+    setIsGeneratingVoice(true)
+    
+    try {
+      const formData = new FormData()
+      
+      // For Own Voice: voice-clone-tts mode (voice sample + text)
+      if (useOwnVoice) {
+        formData.append('mode', 'voice-clone-tts')
+        formData.append('useOwnVoice', 'true')
+        formData.append('sourceAudioUrl', sourceAudioForCloningUrl)
+        formData.append('text', voiceCloneText)
+      } else {
+        // AI Voice modes
+        formData.append('mode', voiceCloneMode)
+        formData.append('voicePreset', selectedVoicePreset)
+        formData.append('useOwnVoice', 'false')
+        
+        if (voiceCloneMode === 'text-to-speech') {
+          formData.append('text', voiceCloneText)
+        } else {
+          formData.append('sourceAudioUrl', sourceAudioForCloningUrl)
+        }
+      }
+      
+      const response = await fetch('/api/voice/clone', {
+        method: 'POST',
+        body: formData
+      })
+      
+      const data = await response.json()
+      
+      if (data.success) {
+        setClonedAudioUrl(data.audioUrl)
+        const voiceMessage = useOwnVoice 
+          ? '🎉 Voiceover generated in YOUR cloned voice!' 
+          : `Voice generated successfully with ${selectedVoicePreset} voice!`
+        showToast(voiceMessage, 'success')
+      } else {
+        throw new Error(data.error || 'Failed to generate voice')
+      }
+    } catch (error) {
+      console.error('Voice cloning error:', error)
+      showToast('Failed to generate voice: ' + (error instanceof Error ? error.message : 'Unknown error'), 'error')
+    } finally {
+      setIsGeneratingVoice(false)
+    }
+  }
+  
+  // Handle source audio upload for speech-to-speech
+  const handleSourceAudioUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    console.log('📁 File selected:', file?.name, file?.type, file?.size)
+    
+    if (file) {
+      // Check file type - allow audio files and mp4 (can contain audio)
+      const isAudioFile = file.type.startsWith('audio/') || 
+                          file.type === 'video/mp4' || 
+                          file.name.match(/\.(mp3|wav|webm|ogg|m4a|aac|mp4)$/i)
+      if (!isAudioFile) {
+        showToast('Please upload an audio file (MP3, WAV, WebM, MP4, etc.)', 'error')
+        return
+      }
+      
+      // Check file size (50MB max)
+      if (file.size > 50 * 1024 * 1024) {
+        showToast('Audio file too large. Max size: 50MB', 'error')
+        return
+      }
+      
+      setSourceAudioForCloning(file)
+      // Create a temporary URL for preview
+      const tempUrl = URL.createObjectURL(file)
+      setSourceAudioForCloningUrl(tempUrl)
+      showToast('Uploading audio...', 'success')
+      
+      // Upload to get a public URL for the API
+      try {
+        const formData = new FormData()
+        formData.append('file', file)
+        formData.append('folder', 'audio')
+        
+        console.log('📤 Uploading to /api/upload...')
+        const response = await fetch('/api/upload', {
+          method: 'POST',
+          body: formData
+        })
+        
+        console.log('📥 Upload response status:', response.status)
+        const data = await response.json()
+        console.log('📥 Upload response data:', data)
+        
+        if (!response.ok || !data.success) {
+          throw new Error(data.error || data.details || 'Upload failed')
+        }
+        
+        if (data.url) {
+          setSourceAudioForCloningUrl(data.url)
+          showToast('✅ Audio uploaded successfully!', 'success')
+          // Move to test step if using Own Voice
+          if (useOwnVoice) {
+            setTimeout(() => setVoiceCloneStep('test'), 300)
+          }
+        }
+      } catch (error) {
+        console.error('❌ Failed to upload audio:', error)
+        showToast('Failed to upload audio: ' + (error instanceof Error ? error.message : 'Unknown error'), 'error')
+        // Keep the temp URL for preview but warn user
+        setSourceAudioForCloningUrl(tempUrl)
+      }
+    }
+  }
+
+  // Voice recording handlers
+  const startVoiceRecording = async (type: 'voice' | 'source') => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      const recorder = new MediaRecorder(stream)
+      const chunks: BlobPart[] = []
+
+      recorder.ondataavailable = (e) => chunks.push(e.data)
+      recorder.onstop = async () => {
+        const blob = new Blob(chunks, { type: 'audio/webm' })
+        const file = new File([blob], `recording-${Date.now()}.webm`, { type: 'audio/webm' })
+        const tempUrl = URL.createObjectURL(blob)
+
+        if (type === 'source') {
+          setSourceAudioForCloning(file)
+          setSourceAudioForCloningUrl(tempUrl)
+          setIsRecordingSource(false)
+          showToast('Recording saved! Uploading...', 'success')
+          
+          // Upload to get a public URL for the API
+          try {
+            const formData = new FormData()
+            formData.append('file', file)
+            formData.append('folder', 'audio')
+            
+            const response = await fetch('/api/upload', {
+              method: 'POST',
+              body: formData
+            })
+            
+            const data = await response.json()
+            
+            if (!response.ok || !data.success) {
+              throw new Error(data.error || 'Upload failed')
+            }
+            
+            if (data.url) {
+              setSourceAudioForCloningUrl(data.url)
+              showToast('✅ Voice recording uploaded!', 'success')
+              // Move to test step if using Own Voice
+              if (useOwnVoice) {
+                setTimeout(() => setVoiceCloneStep('test'), 300)
+              }
+            }
+          } catch (error) {
+            console.error('Failed to upload audio:', error)
+            showToast('Failed to upload recording: ' + (error instanceof Error ? error.message : 'Unknown error'), 'error')
+          }
+        }
+
+        // Stop all tracks
+        stream.getTracks().forEach(track => track.stop())
+        setVoiceRecorder(null)
+        setRecordingType(null)
+      }
+
+      recorder.start()
+      setVoiceRecorder(recorder)
+      setRecordingType(type)
+      
+      if (type === 'voice') {
+        setIsRecordingVoice(true)
+      } else {
+        setIsRecordingSource(true)
+      }
+      
+      showToast(`Recording ${type === 'voice' ? 'voice sample' : 'source audio'}...`, 'success')
+    } catch (error) {
+      console.error('Failed to start recording:', error)
+      showToast('Failed to access microphone. Please grant permission.', 'error')
+    }
+  }
+
+  const stopVoiceRecording = () => {
+    if (voiceRecorder && voiceRecorder.state !== 'inactive') {
+      voiceRecorder.stop()
+      showToast('Recording stopped', 'success')
+    }
   }
 
   // Poll generation status
@@ -1239,11 +1466,43 @@ export default function AIVideoPage() {
         console.log('Total duration:', data.totalDuration || totalDuration)
         
         // Store the URL in a variable to ensure it's not lost
-        const combinedVideoUrl = data.videoUrl
+        let finalCombinedVideoUrl = data.videoUrl
+        
+        // If custom voice is enabled for without-audio mode, sync the audio now
+        if (enableVoiceCloning && clonedAudioUrl && audioCategory === 'without-audio') {
+          console.log('🎤 Syncing custom voice audio with combined video...')
+          setGenerationStatus('Syncing your voice with combined video...')
+          
+          try {
+            const syncResponse = await fetch('/api/video/sync-audio', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                videoUrl: finalCombinedVideoUrl,
+                customAudioUrl: clonedAudioUrl,
+                enableLipSync: false
+              })
+            })
+            
+            const syncData = await syncResponse.json()
+            
+            if (syncData.success && syncData.videoUrl) {
+              finalCombinedVideoUrl = syncData.videoUrl
+              console.log('✅ Custom voice synced with combined video!')
+              showToast('Your voice has been added to the combined video!', 'success')
+            } else {
+              console.warn('⚠️ Audio sync failed:', syncData.error)
+              showToast('Video combined but voice sync failed. Using silent video.', 'warning')
+            }
+          } catch (syncError) {
+            console.error('Audio sync error:', syncError)
+            showToast('Video combined but voice sync failed. Using silent video.', 'warning')
+          }
+        }
         
         // Set the video URL FIRST
-        setGeneratedVideoUrl(combinedVideoUrl)
-        console.log('Set generatedVideoUrl to:', combinedVideoUrl)
+        setGeneratedVideoUrl(finalCombinedVideoUrl)
+        console.log('Set generatedVideoUrl to:', finalCombinedVideoUrl)
         
         // Then change phase to complete
         setClipGenerationPhase('complete')
@@ -1256,7 +1515,7 @@ export default function AIVideoPage() {
         showToast(`Video combined successfully! ${data.totalDuration || totalDuration} seconds. Check below!`, 'success')
         
         // Save to drafts only (user can manually save to My Media)
-        saveToDraftsWithData(combinedVideoUrl, currentPrompt, currentEnhancedScript)
+        saveToDraftsWithData(finalCombinedVideoUrl, currentPrompt, currentEnhancedScript)
           .then(() => console.log('Saved to drafts'))
           .catch(err => console.error('Save error:', err))
         
@@ -1412,7 +1671,7 @@ export default function AIVideoPage() {
           videoUrl: generatedVideoUrl,
           prompt: promptToSave,
           enhancedPrompt: enhancedPromptToSave,
-          model: audioCategory === 'with-audio' ? 'veo-3.1-fast' : (videoInputType === 'image-to-video' ? 'runway-gen4-turbo' : 'runway-veo3.1-fast'),
+          model: 'veo-3.1-fast', // All modes now use Gemini Veo 3.1 Fast
           mode: videoInputType,
           duration: parseInt(selectedDuration),
           settings: {
@@ -1541,6 +1800,552 @@ export default function AIVideoPage() {
               </div>
             </div>
 
+            {/* Voice Cloning Section - Only show when "Without Audio" is selected */}
+            {audioCategory === 'without-audio' && (
+              <div className="mb-6 p-4 border-2 border-primary/20 rounded-lg bg-primary/5 space-y-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-primary/20 rounded-lg flex items-center justify-center">
+                      <Mic className="w-5 h-5 text-primary" />
+                    </div>
+                    <div>
+                      <div className="text-sm font-bold text-foreground">Add Custom Voice</div>
+                      <div className="text-xs text-foreground-secondary">Add your cloned voice to the silent video</div>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => setEnableVoiceCloning(!enableVoiceCloning)}
+                    className={`relative w-12 h-6 rounded-full transition-all duration-300 ${
+                      enableVoiceCloning ? 'bg-primary' : 'bg-background border border-border'
+                    }`}
+                  >
+                    <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all duration-300 shadow-md ${
+                      enableVoiceCloning ? 'left-7' : 'left-1'
+                    }`} />
+                  </button>
+                </div>
+
+                {enableVoiceCloning && (
+                  <div className="space-y-4 animate-fade-in">
+                    {/* How It Works */}
+                    <div className="p-3 bg-blue-500/10 border border-blue-500/20 rounded-lg">
+                      <div className="text-xs font-medium text-blue-400 mb-1">🎯 How Voice Generation Works</div>
+                      <div className="text-xs text-foreground-secondary">
+                        1. Choose a voice preset from 50+ AI voices<br/>
+                        2. Type text OR upload audio to convert<br/>
+                        3. AI generates audio in the selected voice!
+                      </div>
+                    </div>
+
+                    {/* Voice Clone Mode Selection - Hidden when using Own Voice */}
+                    {!useOwnVoice && (
+                      <div className="space-y-2">
+                        <label className="text-xs font-medium text-foreground">Clone Mode</label>
+                        <div className="grid grid-cols-2 gap-3">
+                          <button
+                            onClick={() => setVoiceCloneMode('text-to-speech')}
+                            className={`p-3 rounded-lg border-2 transition-all duration-300 hover:scale-105 ${
+                              voiceCloneMode === 'text-to-speech'
+                                ? 'border-primary bg-primary/10'
+                                : 'border-border hover:border-primary/50 bg-background-tertiary'
+                            }`}
+                          >
+                            <div className="flex items-center gap-2">
+                              <span className="text-xl">📝</span>
+                              <div className="text-left">
+                                <div className="text-xs font-bold text-foreground">Text-to-Speech</div>
+                                <div className="text-xs text-foreground-secondary">Type what to say</div>
+                              </div>
+                            </div>
+                          </button>
+                          <button
+                            onClick={() => setVoiceCloneMode('speech-to-speech')}
+                            className={`p-3 rounded-lg border-2 transition-all duration-300 hover:scale-105 ${
+                              voiceCloneMode === 'speech-to-speech'
+                                ? 'border-primary bg-primary/10'
+                                : 'border-border hover:border-primary/50 bg-background-tertiary'
+                            }`}
+                          >
+                            <div className="flex items-center gap-2">
+                              <span className="text-xl">🎤</span>
+                              <div className="text-left">
+                                <div className="text-xs font-bold text-foreground">Speech-to-Speech</div>
+                                <div className="text-xs text-foreground-secondary">Convert audio</div>
+                              </div>
+                            </div>
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Select Voice Preset */}
+                    <div className="space-y-2">
+                      <label className="text-xs font-medium text-foreground flex items-center gap-2">
+                        <Music className="w-3 h-3" />
+                        Step 1: Choose Voice <span className="text-red-500">*</span>
+                      </label>
+                      <p className="text-xs text-foreground-secondary">
+                        Select an AI voice or use your own voice
+                      </p>
+                      
+                      {/* Own Voice Toggle */}
+                      <div className="flex items-center gap-3 p-3 rounded-lg border-2 border-border bg-background-tertiary">
+                        <button
+                          onClick={() => {
+                            setUseOwnVoice(false)
+                            // Reset voice clone states when switching to AI voice
+                            setVoiceCloneStep('record')
+                            setVoiceCloneConfirmed(false)
+                          }}
+                          className={`flex-1 px-3 py-2 rounded-lg text-xs font-medium transition-all ${
+                            !useOwnVoice 
+                              ? 'bg-primary text-white' 
+                              : 'bg-background hover:bg-primary/10 text-foreground-secondary'
+                          }`}
+                        >
+                          🎭 AI Voice
+                        </button>
+                        <button
+                          onClick={() => {
+                            setUseOwnVoice(true)
+                            // Reset to first step when switching to own voice
+                            if (!sourceAudioForCloningUrl) {
+                              setVoiceCloneStep('record')
+                            } else if (!voiceCloneConfirmed) {
+                              setVoiceCloneStep('test')
+                            }
+                          }}
+                          className={`flex-1 px-3 py-2 rounded-lg text-xs font-medium transition-all ${
+                            useOwnVoice 
+                              ? 'bg-primary text-white' 
+                              : 'bg-background hover:bg-primary/10 text-foreground-secondary'
+                          }`}
+                        >
+                          🎤 My Own Voice
+                        </button>
+                      </div>
+                      
+                      {useOwnVoice ? (
+                        <div className="space-y-3">
+                          {/* Step Progress Indicator */}
+                          <div className="flex items-center justify-between p-3 rounded-lg bg-gradient-to-r from-primary/10 to-purple-500/10 border border-primary/30">
+                            <div className="flex items-center gap-4">
+                              <div className={`flex items-center gap-1 ${voiceCloneStep === 'record' ? 'text-primary' : sourceAudioForCloningUrl ? 'text-green-500' : 'text-foreground-secondary'}`}>
+                                <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${voiceCloneStep === 'record' ? 'bg-primary text-white' : sourceAudioForCloningUrl ? 'bg-green-500 text-white' : 'bg-background-tertiary'}`}>
+                                  {sourceAudioForCloningUrl ? '✓' : '1'}
+                                </div>
+                                <span className="text-xs font-medium">Record</span>
+                              </div>
+                              <div className="w-8 h-0.5 bg-border"></div>
+                              <div className={`flex items-center gap-1 ${voiceCloneStep === 'test' ? 'text-primary' : testVoiceAudioUrl ? 'text-green-500' : 'text-foreground-secondary'}`}>
+                                <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${voiceCloneStep === 'test' ? 'bg-primary text-white' : testVoiceAudioUrl ? 'bg-green-500 text-white' : 'bg-background-tertiary'}`}>
+                                  {testVoiceAudioUrl ? '✓' : '2'}
+                                </div>
+                                <span className="text-xs font-medium">Test</span>
+                              </div>
+                              <div className="w-8 h-0.5 bg-border"></div>
+                              <div className={`flex items-center gap-1 ${voiceCloneConfirmed ? 'text-green-500' : 'text-foreground-secondary'}`}>
+                                <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${voiceCloneConfirmed ? 'bg-green-500 text-white' : 'bg-background-tertiary'}`}>
+                                  {voiceCloneConfirmed ? '✓' : '3'}
+                                </div>
+                                <span className="text-xs font-medium">Use</span>
+                              </div>
+                            </div>
+                          </div>
+                          
+                          {/* STEP 1: Record Voice Sample */}
+                          {voiceCloneStep === 'record' && (
+                            <div className="space-y-3 p-4 rounded-lg border-2 border-primary/30 bg-background-secondary">
+                              <div className="flex items-center gap-2 text-primary">
+                                <Mic className="w-4 h-4" />
+                                <span className="font-medium text-sm">Step 1: Record Your Voice Sample</span>
+                              </div>
+                              <p className="text-xs text-foreground-secondary">
+                                Record 10-30 seconds of your voice. Speak clearly for best cloning quality.
+                              </p>
+                              
+                              <div className="grid grid-cols-2 gap-2">
+                                <input
+                                  type="file"
+                                  accept="audio/*,video/mp4,.mp3,.wav,.webm,.ogg,.m4a,.aac,.mp4"
+                                  onChange={handleSourceAudioUpload}
+                                  className="hidden"
+                                  id="voice-clone-upload"
+                                />
+                                <label
+                                  htmlFor="voice-clone-upload"
+                                  className="flex items-center justify-center gap-2 p-4 border-2 border-dashed border-primary/50 rounded-lg cursor-pointer hover:border-primary hover:bg-primary/10 transition-all duration-300 bg-background-tertiary"
+                                >
+                                  <Upload className="w-5 h-5 text-primary" />
+                                  <span className="text-sm text-primary">Upload Audio</span>
+                                </label>
+                                
+                                <button
+                                  type="button"
+                                  onClick={() => isRecordingSource ? stopVoiceRecording() : startVoiceRecording('source')}
+                                  className={`flex items-center justify-center gap-2 p-4 border-2 rounded-lg transition-all duration-300 ${
+                                    isRecordingSource 
+                                      ? 'border-red-500 bg-red-500/20 text-red-400 animate-pulse' 
+                                      : 'border-primary/50 hover:border-primary hover:bg-primary/10 bg-background-tertiary'
+                                  }`}
+                                >
+                                  <Mic className={`w-5 h-5 ${isRecordingSource ? 'text-red-400' : 'text-primary'}`} />
+                                  <span className={`text-sm ${isRecordingSource ? 'text-red-400' : 'text-primary'}`}>
+                                    {isRecordingSource ? '⏹ Stop Recording' : '🎙 Record Voice'}
+                                  </span>
+                                </button>
+                              </div>
+                              
+                              {isRecordingSource && (
+                                <div className="flex items-center justify-center gap-2 p-2 rounded-lg bg-red-500/10 border border-red-500/30">
+                                  <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse"></div>
+                                  <span className="text-xs text-red-400 font-medium">Recording... Speak now!</span>
+                                </div>
+                              )}
+                              
+                              {sourceAudioForCloningUrl && (
+                                <div className="space-y-2 p-3 rounded-lg bg-green-500/10 border border-green-500/30">
+                                  <div className="flex items-center gap-2 text-green-500 text-xs">
+                                    <Check className="w-3 h-3" />
+                                    <span className="font-medium">Voice sample recorded!</span>
+                                  </div>
+                                  <audio src={sourceAudioForCloningUrl} controls className="w-full h-10" />
+                                  <button
+                                    onClick={() => setVoiceCloneStep('test')}
+                                    className="w-full mt-2 px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg text-sm font-medium transition-all"
+                                  >
+                                    Next: Test My Voice →
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+                          )}
+                          
+                          {/* STEP 2: Test Voice Clone */}
+                          {voiceCloneStep === 'test' && (
+                            <div className="space-y-3 p-4 rounded-lg border-2 border-purple-500/30 bg-background-secondary">
+                              <div className="flex items-center gap-2 text-purple-500">
+                                <Type className="w-4 h-4" />
+                                <span className="font-medium text-sm">Step 2: Test Your Cloned Voice</span>
+                              </div>
+                              <p className="text-xs text-foreground-secondary">
+                                Type any text to hear how your cloned voice sounds. Test it before using!
+                              </p>
+                              
+                              {/* Voice Sample Preview */}
+                              <div className="p-2 rounded-lg bg-background-tertiary border border-border">
+                                <p className="text-xs text-foreground-secondary mb-1">Your voice sample:</p>
+                                <audio src={sourceAudioForCloningUrl} controls className="w-full h-8" />
+                              </div>
+                              
+                              <textarea
+                                value={testVoiceText}
+                                onChange={(e) => setTestVoiceText(e.target.value)}
+                                placeholder="Type something to test your cloned voice... e.g. 'Hello! This is my cloned voice speaking.'"
+                                className="w-full px-3 py-2 text-sm rounded-lg border-2 border-border bg-background-tertiary text-foreground placeholder-foreground-secondary focus:border-purple-500 focus:outline-none resize-none"
+                                rows={3}
+                              />
+                              
+                              <button
+                                onClick={async () => {
+                                  if (!testVoiceText.trim()) {
+                                    showToast('Please enter some text to test', 'warning')
+                                    return
+                                  }
+                                  setIsTestingVoice(true)
+                                  try {
+                                    const formData = new FormData()
+                                    formData.append('mode', 'voice-clone-tts')
+                                    formData.append('useOwnVoice', 'true')
+                                    formData.append('sourceAudioUrl', sourceAudioForCloningUrl)
+                                    formData.append('text', testVoiceText)
+                                    
+                                    const response = await fetch('/api/voice/clone', {
+                                      method: 'POST',
+                                      body: formData
+                                    })
+                                    const data = await response.json()
+                                    
+                                    if (data.success) {
+                                      setTestVoiceAudioUrl(data.audioUrl)
+                                      showToast('🎉 Voice cloned! Listen to the preview below', 'success')
+                                    } else {
+                                      throw new Error(data.error)
+                                    }
+                                  } catch (error) {
+                                    showToast('Failed to test voice: ' + (error instanceof Error ? error.message : 'Unknown error'), 'error')
+                                  } finally {
+                                    setIsTestingVoice(false)
+                                  }
+                                }}
+                                disabled={isTestingVoice || !testVoiceText.trim()}
+                                className="w-full px-4 py-2.5 bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white rounded-lg font-medium transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                              >
+                                {isTestingVoice ? (
+                                  <>
+                                    <Loader2 className="w-4 h-4 animate-spin" />
+                                    <span>Cloning Voice...</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <Wand2 className="w-4 h-4" />
+                                    <span>🧪 Test My Cloned Voice</span>
+                                  </>
+                                )}
+                              </button>
+                              
+                              {/* Test Result Preview */}
+                              {testVoiceAudioUrl && (
+                                <div className="space-y-3 p-3 rounded-lg bg-gradient-to-r from-green-500/10 to-emerald-500/10 border border-green-500/30">
+                                  <div className="flex items-center gap-2 text-green-500">
+                                    <Check className="w-4 h-4" />
+                                    <span className="font-medium text-sm">🎉 Your Cloned Voice Preview!</span>
+                                  </div>
+                                  <audio src={testVoiceAudioUrl} controls className="w-full h-10" autoPlay />
+                                  <p className="text-xs text-foreground-secondary">
+                                    Happy with how it sounds? Click &quot;Use This Voice&quot; to proceed!
+                                  </p>
+                                  
+                                  <div className="flex gap-2">
+                                    <button
+                                      onClick={() => {
+                                        setTestVoiceAudioUrl('')
+                                        setTestVoiceText('')
+                                      }}
+                                      className="flex-1 px-4 py-2 border-2 border-border hover:border-primary/50 rounded-lg text-sm font-medium text-foreground-secondary hover:text-foreground transition-all"
+                                    >
+                                      🔄 Try Different Text
+                                    </button>
+                                    <button
+                                      onClick={() => {
+                                        setVoiceCloneConfirmed(true)
+                                        setVoiceCloneStep('ready')
+                                        showToast('✅ Voice clone ready! Now enter the text for your video.', 'success')
+                                      }}
+                                      className="flex-1 px-4 py-2 bg-green-500 hover:bg-green-600 text-white rounded-lg text-sm font-medium transition-all"
+                                    >
+                                      ✅ Use This Voice
+                                    </button>
+                                  </div>
+                                </div>
+                              )}
+                              
+                              {/* Back Button */}
+                              <button
+                                onClick={() => setVoiceCloneStep('record')}
+                                className="text-xs text-foreground-secondary hover:text-foreground transition-all"
+                              >
+                                ← Back to record new sample
+                              </button>
+                            </div>
+                          )}
+                          
+                          {/* STEP 3: Ready to Use - Enter Final Text */}
+                          {voiceCloneStep === 'ready' && voiceCloneConfirmed && (
+                            <div className="space-y-3 p-4 rounded-lg border-2 border-green-500/30 bg-background-secondary">
+                              <div className="flex items-center gap-2 text-green-500">
+                                <Check className="w-4 h-4" />
+                                <span className="font-medium text-sm">Step 3: Voice Clone Ready!</span>
+                              </div>
+                              
+                              <div className="p-3 rounded-lg bg-green-500/10 border border-green-500/30">
+                                <div className="flex items-center gap-2 mb-2">
+                                  <div className="w-8 h-8 rounded-full bg-green-500 flex items-center justify-center">
+                                    <Mic className="w-4 h-4 text-white" />
+                                  </div>
+                                  <div>
+                                    <p className="text-sm font-medium text-green-500">Your Voice Clone is Active</p>
+                                    <p className="text-xs text-foreground-secondary">Audio will be generated in your cloned voice</p>
+                                  </div>
+                                </div>
+                                <audio src={testVoiceAudioUrl || sourceAudioForCloningUrl} controls className="w-full h-8" />
+                              </div>
+                              
+                              <div className="space-y-2">
+                                <label className="text-xs font-medium text-foreground flex items-center gap-2">
+                                  <Type className="w-3 h-3" />
+                                  Enter Text for Video Voiceover <span className="text-red-500">*</span>
+                                </label>
+                                <textarea
+                                  value={voiceCloneText}
+                                  onChange={(e) => setVoiceCloneText(e.target.value)}
+                                  placeholder="Enter what you want to say in your video..."
+                                  className="w-full px-3 py-2 text-sm rounded-lg border-2 border-border bg-background-tertiary text-foreground placeholder-foreground-secondary focus:border-green-500 focus:outline-none resize-none"
+                                  rows={4}
+                                />
+                                <div className="flex items-center justify-between text-xs">
+                                  <span className="text-foreground-secondary">{voiceCloneText.length} characters</span>
+                                  {voiceCloneText && (
+                                    <span className="text-green-500 flex items-center gap-1">
+                                      <Check className="w-3 h-3" />
+                                      Ready to generate!
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                              
+                              {/* Reset Voice Clone */}
+                              <button
+                                onClick={() => {
+                                  setVoiceCloneStep('record')
+                                  setVoiceCloneConfirmed(false)
+                                  setTestVoiceAudioUrl('')
+                                  setTestVoiceText('')
+                                  setSourceAudioForCloningUrl('')
+                                  setSourceAudioForCloning(null)
+                                }}
+                                className="text-xs text-foreground-secondary hover:text-red-400 transition-all flex items-center gap-1"
+                              >
+                                <RefreshCw className="w-3 h-3" />
+                                Start over with a new voice sample
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <>
+                          <select
+                            value={selectedVoicePreset}
+                            onChange={(e) => setSelectedVoicePreset(e.target.value)}
+                            className="w-full px-3 py-2 text-sm rounded-lg border-2 border-border bg-background-tertiary text-foreground focus:border-primary focus:outline-none"
+                          >
+                            {VOICE_PRESETS.map((preset) => (
+                              <option key={preset.name} value={preset.name}>
+                                {preset.name} - {preset.description}
+                              </option>
+                            ))}
+                          </select>
+                          
+                          <div className="flex items-center gap-2 text-primary text-xs">
+                            <Check className="w-3 h-3" />
+                            <span>Voice: {selectedVoicePreset} (ElevenLabs)</span>
+                          </div>
+                        </>
+                      )}
+                    </div>
+
+                    {/* Step 2: Text-to-Speech (type text) - Only when NOT using Own Voice */}
+                    {voiceCloneMode === 'text-to-speech' && !useOwnVoice && (
+                      <div className="space-y-2">
+                        <label className="text-xs font-medium text-foreground flex items-center gap-2">
+                          <Type className="w-3 h-3" />
+                          Step 2: What to Say <span className="text-red-500">*</span>
+                        </label>
+                        <p className="text-xs text-foreground-secondary">
+                          Type the text you want the AI to speak
+                        </p>
+                        <textarea
+                          value={voiceCloneText}
+                          onChange={(e) => setVoiceCloneText(e.target.value)}
+                          placeholder="Enter the text you want to hear..."
+                          className="w-full px-3 py-2 text-sm rounded-lg border-2 border-border bg-background-tertiary text-foreground placeholder-foreground-secondary focus:border-primary focus:outline-none resize-none"
+                          rows={4}
+                        />
+                        <div className="text-xs text-foreground-secondary text-right">
+                          {voiceCloneText.length} characters
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Step 2: Speech-to-Speech (upload/record audio) - Only when NOT using Own Voice */}
+                    {voiceCloneMode === 'speech-to-speech' && !useOwnVoice && (
+                      <div className="space-y-2">
+                        <label className="text-xs font-medium text-foreground flex items-center gap-2">
+                          <Mic className="w-3 h-3" />
+                          Step 2: Source Audio <span className="text-red-500">*</span>
+                        </label>
+                        <p className="text-xs text-foreground-secondary">
+                          Upload audio to convert to the selected voice
+                        </p>
+                        
+                        <div className="grid grid-cols-2 gap-2">
+                          {/* Upload Button */}
+                          <input
+                            type="file"
+                            accept="audio/*"
+                            onChange={handleSourceAudioUpload}
+                            className="hidden"
+                            id="source-audio-upload"
+                          />
+                          <label
+                            htmlFor="source-audio-upload"
+                            className="flex items-center justify-center gap-2 p-3 border-2 border-dashed border-border rounded-lg cursor-pointer hover:border-primary/50 transition-all duration-300 bg-background-tertiary"
+                          >
+                            <Upload className="w-4 h-4" />
+                            <span className="text-xs">Upload</span>
+                          </label>
+                          
+                          {/* Record Button */}
+                          <button
+                            type="button"
+                            onClick={() => isRecordingSource ? stopVoiceRecording() : startVoiceRecording('source')}
+                            className={`flex items-center justify-center gap-2 p-3 border-2 rounded-lg transition-all duration-300 ${
+                              isRecordingSource 
+                                ? 'border-red-500 bg-red-500/10 text-red-500' 
+                                : 'border-border hover:border-primary/50 bg-background-tertiary'
+                            }`}
+                          >
+                            <Mic className="w-4 h-4" />
+                            <span className="text-xs">{isRecordingSource ? 'Stop' : 'Record'}</span>
+                          </button>
+                        </div>
+                        
+                        {sourceAudioForCloningUrl && (
+                          <div className="space-y-1">
+                            <div className="flex items-center gap-2 text-primary text-xs">
+                              <Music className="w-3 h-3" />
+                              <span>Source audio ready ✓</span>
+                            </div>
+                            <audio src={sourceAudioForCloningUrl} controls className="w-full h-8" />
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Generate Voice Button - Only show for AI Voice or when Own Voice is confirmed */}
+                    {(!useOwnVoice || (useOwnVoice && voiceCloneConfirmed)) && (
+                      <button
+                        onClick={handleVoiceCloning}
+                        disabled={isGeneratingVoice || (useOwnVoice ? (!voiceCloneConfirmed || !voiceCloneText.trim()) : (voiceCloneMode === 'text-to-speech' ? !voiceCloneText.trim() : !sourceAudioForCloningUrl))}
+                        className="w-full px-4 py-2.5 bg-gradient-to-r from-primary to-purple-500 hover:from-primary-hover hover:to-purple-600 text-white rounded-lg font-medium transition-all duration-300 hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 flex items-center justify-center gap-2"
+                      >
+                        {isGeneratingVoice ? (
+                          <>
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                            <span className="text-sm">{useOwnVoice ? '🎤 Generating with Your Voice...' : 'Generating Voice...'}</span>
+                          </>
+                        ) : (
+                          <>
+                            <Wand2 className="w-4 h-4" />
+                            <span className="text-sm">
+                              {useOwnVoice 
+                                ? '🎤 Generate Voiceover with My Voice'
+                                : (voiceCloneMode === 'text-to-speech' ? 'Generate from Text' : 'Convert Voice')
+                              }
+                            </span>
+                          </>
+                        )}
+                      </button>
+                    )}
+
+                    {/* Cloned Audio Preview */}
+                    {clonedAudioUrl && (
+                      <div className="p-3 bg-green-500/10 border border-green-500/20 rounded-lg space-y-2">
+                        <div className="flex items-center gap-2 text-green-600 dark:text-green-400">
+                          <Check className="w-4 h-4" />
+                          <span className="text-xs font-medium">Voice generated successfully!</span>
+                        </div>
+                        <audio src={clonedAudioUrl} controls className="w-full h-8" />
+                        <p className="text-xs text-foreground-secondary">
+                          This audio will be included in your video generation
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* Input Type Selection */}
             <div className="space-y-2 mb-6">
               <label className="text-sm font-medium text-foreground">Input Type</label>
@@ -1559,9 +2364,7 @@ export default function AIVideoPage() {
                       <div className="text-sm font-bold text-foreground">With Reference Image</div>
                       <div className="text-xs text-foreground-secondary">Use image as reference</div>
                       <div className="text-xs text-primary font-medium mt-1">
-                        {audioCategory === 'without-audio' 
-                          ? `${selectedQualityTier === '1080p' ? '6' : '5'} credits/sec` 
-                          : `${selectedQualityTier === '1080p' ? '16' : '15'} credits/sec`}
+                        {selectedQualityTier === '1080p' ? '16' : '15'} credits/sec
                       </div>
                     </div>
                   </div>
@@ -1840,6 +2643,17 @@ export default function AIVideoPage() {
               {/* Custom Enhancement Options */}
               {showEnhanceOptions && (
                 <div className="space-y-3 p-4 bg-background-tertiary rounded-lg border border-border animate-slide-down">
+                  <div className="mb-3 p-3 bg-blue-500/10 border border-blue-500/20 rounded-lg">
+                    <div className="flex items-start gap-2">
+                      <Info className="w-4 h-4 text-blue-400 mt-0.5 flex-shrink-0" />
+                      <div className="text-xs text-blue-300 space-y-1">
+                        <p className="font-medium">💡 Enhanced prompts create cohesive storylines</p>
+                        <p className="text-blue-300/80">
+                          When you enhance your prompt, AI will break it into {getClipCountForEnhancement()} connected clips that flow together as ONE continuous story. Each clip will naturally transition to the next, maintaining consistent characters, settings, and visual style throughout.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
                   <label className="block text-sm font-medium text-foreground">
                     Custom Enhancement Instructions (Optional)
                   </label>
@@ -1861,12 +2675,12 @@ export default function AIVideoPage() {
                     {isEnhancing ? (
                       <>
                         <Loader2 className="w-4 h-4 animate-spin" />
-                        Creating {getClipCountForEnhancement()} clip{getClipCountForEnhancement() > 1 ? 's' : ''}...
+                        Creating {getClipCountForEnhancement()} cohesive clip{getClipCountForEnhancement() > 1 ? 's' : ''}...
                       </>
                     ) : (
                       <>
                         <Zap className="w-4 h-4" />
-                        Enhance Prompt
+                        Enhance Prompt (Creates Unified Story)
                       </>
                     )}
                   </button>
@@ -1977,7 +2791,7 @@ export default function AIVideoPage() {
                 <p className="text-[11px] text-foreground-secondary flex items-center gap-1.5">
                   <Sparkles className="w-3 h-3" />
                   {selectedModel === 'veo3.1_fast' && scriptSections.length > 1
-                    ? `${scriptSections.length} clips → ${selectedDuration}s video. Edit any clip before generating.`
+                    ? `${scriptSections.length} cohesive clips → ${selectedDuration}s unified story. Each clip flows naturally into the next.`
                     : 'This enhanced script will be used for video generation'}
                 </p>
               </div>
@@ -2671,11 +3485,11 @@ export default function AIVideoPage() {
                     Download
                   </button>
                   <button 
-                    onClick={() => saveToDrafts(generatedVideoUrl)}
+                    onClick={() => saveToMyMedia()}
                     className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium transition-all duration-300 flex items-center justify-center gap-2"
                   >
                     <Check className="w-4 h-4" />
-                    Save to Drafts
+                    Save to My Media
                   </button>
                 </div>
                 {/* Create New Video Button */}

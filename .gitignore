@@ -13,12 +13,21 @@ out
 dist
 build
 
-# Environment variables
+# Environment variables - NEVER COMMIT THESE
 .env
+.env.*
 .env.local
 .env.development.local
 .env.test.local
 .env.production.local
+*.env
+.env.backup
+.env.production
+.env.development
+.env.staging
+
+# ngrok configuration
+ngrok.yml
 
 # Testing
 coverage

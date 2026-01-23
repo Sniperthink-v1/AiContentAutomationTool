@@ -21,7 +21,8 @@ import {
   Library,
   FolderOpen,
   Sparkles,
-  Check
+  Check,
+  Film
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useState, useEffect, useRef } from 'react'
@@ -34,6 +35,7 @@ const navigation = [
   { name: 'Stories', href: '/dashboard/stories', icon: Smartphone },
   { name: 'AI Photos', href: '/dashboard/ai-photos', icon: ImagePlus },
   { name: 'AI Video', href: '/dashboard/ai-video', icon: Video },
+  { name: 'Video Editor', href: '/dashboard/video-editor', icon: Film },
   { name: 'AI Music', href: '/dashboard/ai-music', icon: Music },
   { name: 'My Songs', href: '/dashboard/my-songs', icon: Library },
   { name: 'My Media', href: '/dashboard/my-media', icon: FolderOpen },

@@ -18,15 +18,16 @@ export async function POST(request: NextRequest) {
       
       if (userId) {
         // Log the deauthorization
-        console.log(`User ${userId} deauthorized the app`);
+        console.log(`Instagram user ${userId} deauthorized the app`);
         
-        // Optional: Remove user's Instagram token from database
+        // Remove user's Instagram connection from social_integrations table
         const client = await pool.connect();
         try {
           await client.query(
-            'UPDATE users SET instagram_token = NULL, instagram_user_id = NULL WHERE instagram_user_id = $1',
+            "UPDATE social_integrations SET is_active = false, access_token = NULL WHERE platform = 'instagram' AND platform_user_id = $1",
             [userId]
           );
+          console.log(`Deactivated Instagram connection for platform user ${userId}`);
         } finally {
           client.release();
         }

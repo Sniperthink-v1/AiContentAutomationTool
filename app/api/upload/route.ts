@@ -81,7 +81,8 @@ export async function POST(request: NextRequest) {
     else if (contentType.includes('multipart/form-data')) {
       const formData = await request.formData()
       file = formData.get('file') as File
-      folder = formData.get('folder') as string || ''
+      // Support both 'folder' and 'type' parameters for compatibility
+      folder = (formData.get('folder') as string) || (formData.get('type') as string) || ''
 
       if (!file) {
         return NextResponse.json(
@@ -90,9 +91,10 @@ export async function POST(request: NextRequest) {
         )
       }
 
-      // Validate file size (max 100MB for videos/stories, 10MB for images)
+      // Validate file size (max 100MB for videos, 50MB for audio, 10MB for images)
       const isVideo = file.type.startsWith('video/')
-      const maxSize = isVideo ? 100 * 1024 * 1024 : 10 * 1024 * 1024
+      const isAudio = file.type.startsWith('audio/')
+      const maxSize = isVideo ? 100 * 1024 * 1024 : isAudio ? 50 * 1024 * 1024 : 10 * 1024 * 1024
       if (file.size > maxSize) {
         return NextResponse.json(
           { 

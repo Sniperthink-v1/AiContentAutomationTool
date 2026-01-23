@@ -2,6 +2,52 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getAuthUser } from '@/lib/middleware'
 import pool from '@/lib/db'
 import { GoogleGenAI } from '@google/genai'
+import { exec } from 'child_process'
+import { promisify } from 'util'
+import { writeFile, unlink, mkdir, readFile } from 'fs/promises'
+import { existsSync } from 'fs'
+import path from 'path'
+import { v4 as uuidv4 } from 'uuid'
+
+const execAsync = promisify(exec)
+
+// Helper to download video from URL
+async function downloadVideo(url: string, outputPath: string): Promise<void> {
+  const response = await fetch(url)
+  if (!response.ok) {
+    throw new Error(`Failed to download video: ${response.statusText}`)
+  }
+  const buffer = await response.arrayBuffer()
+  await writeFile(outputPath, Buffer.from(buffer))
+}
+
+// Helper to extract last frame from video as base64
+async function extractLastFrame(videoPath: string): Promise<{ base64: string, mimeType: string }> {
+  const outputPath = `${videoPath}_lastframe.jpg`
+  
+  try {
+    // Extract the last frame using FFmpeg
+    const command = `ffmpeg -sseof -1 -i "${videoPath}" -update 1 -q:v 1 -frames:v 1 "${outputPath}" -y`
+    await execAsync(command)
+    
+    // Read the image and convert to base64
+    const imageBuffer = await readFile(outputPath)
+    const base64Image = imageBuffer.toString('base64')
+    
+    // Cleanup the temporary image file
+    try {
+      await unlink(outputPath)
+    } catch {}
+    
+    return {
+      base64: base64Image,
+      mimeType: 'image/jpeg'
+    }
+  } catch (error) {
+    console.error('Error extracting last frame:', error)
+    throw new Error('Failed to extract last frame from video')
+  }
+}
 
 // Function to analyze image and get detailed character description using Gemini
 async function analyzeImageForCharacter(imageData: string, mimeType: string): Promise<string> {
@@ -215,6 +261,8 @@ export async function POST(request: NextRequest) {
       duration = 8, // Total duration (8, 16, 24, or 32 seconds)
       sourceImage, // Base64 image for image-to-video mode
       inputType = 'text-to-video', // 'image-to-video' or 'text-to-video'
+      withAudio = true, // Whether to generate with audio (true = with audio, false = without)
+      customAudioUrl, // Pre-generated audio URL (from Runway) to sync video to
     } = body
 
     // Determine clips to generate
@@ -239,8 +287,8 @@ export async function POST(request: NextRequest) {
     }
 
     // Calculate credit cost (15 credits per second for Veo 3.1)
-    // For single clip: use full duration, for multiple clips: each is 8 seconds
-    const durationPerClip = clipCount === 1 ? duration : 8
+    // Divide the selected duration evenly among all clips
+    const durationPerClip = Math.ceil(duration / clipCount)
     const creditCost = 15 * clipCount * durationPerClip
 
     // Check user credits
@@ -268,8 +316,7 @@ export async function POST(request: NextRequest) {
     // Initialize Google Gen AI client with Veo API key
     const client = new GoogleGenAI({ apiKey })
 
-    // If image-to-video mode, analyze the image FIRST to get character description
-    let characterDescription = ''
+    // If image-to-video mode, extract image data for all clips
     let imageData = ''
     let imageMimeType = 'image/png'
     
@@ -285,14 +332,22 @@ export async function POST(request: NextRequest) {
         }
       }
       
-      // Analyze image to get detailed character description (happens automatically)
-      console.log('Analyzing image for character description...')
-      characterDescription = await analyzeImageForCharacter(imageData, imageMimeType)
-      console.log('Character description obtained:', characterDescription ? 'Yes' : 'No')
+      console.log('Image data extracted for video generation')
     }
 
-    // Generate videos for each clip
+    // Generate videos for each clip SEQUENTIALLY (for image-to-video with frame extraction)
     const operationNames: string[] = []
+    const videoUrls: string[] = []
+    
+    // Create temp directory for video processing
+    const tempDir = path.join(process.cwd(), 'tmp', 'video-frames')
+    if (!existsSync(tempDir)) {
+      await mkdir(tempDir, { recursive: true })
+    }
+    
+    const sessionId = uuidv4()
+    let currentImageData = imageData
+    let currentImageMimeType = imageMimeType
     
     for (let i = 0; i < clips.length; i++) {
       const clipPrompt = clips[i]
@@ -300,14 +355,23 @@ export async function POST(request: NextRequest) {
       // Use the prompt exactly as provided by the user - no style modifications
       const enhancedPrompt = clipPrompt
 
-      console.log(`Starting Veo 3.1 Fast generation for clip ${i + 1}/${clipCount}:`, enhancedPrompt.substring(0, 100))
-      console.log(`Input type: ${inputType}, Has source image: ${!!sourceImage}, Duration: ${durationPerClip}s`)
+      console.log(`\n=== Starting Veo 3.1 Fast generation for clip ${i + 1}/${clipCount} ===`)
+      console.log(`Prompt: ${enhancedPrompt.substring(0, 100)}`)
+      console.log(`Input type: ${inputType}, Has source image: ${!!currentImageData}, Duration: ${durationPerClip}s, With Audio: ${withAudio}, Custom Audio: ${!!customAudioUrl}`)
 
       // Build generation config
       const generateConfig: any = {
         aspectRatio: aspectRatio,
         numberOfVideos: 1,
-        durationSeconds: durationPerClip, // Use configurable duration (8, 16, 24, or 32 seconds for single clip)
+        durationSeconds: durationPerClip,
+      }
+      
+      // Add audio config based on withAudio parameter and custom audio
+      if (!withAudio || customAudioUrl) {
+        // Disable audio generation if:
+        // 1. "without audio" mode, OR
+        // 2. Custom audio is provided (we'll use that instead)
+        generateConfig.includeAudio = false
       }
 
       // Build request options based on input type
@@ -315,73 +379,40 @@ export async function POST(request: NextRequest) {
         model: 'veo-3.1-fast-generate-preview',
         config: generateConfig,
       }
-
-      // Handle image-to-video mode with character description
-      if (inputType === 'image-to-video' && sourceImage && imageData) {
-        // SMART STRATEGY BASED ON VIDEO LENGTH:
-        // Single clip (8s): Just animate the image naturally, no extra specs
-        // Multiple clips (16s+): Use strict character consistency
+      
+      // If custom audio is provided, add it to the request
+      // Gemini will sync the video to this audio (lip-sync, timing, etc.)
+      if (customAudioUrl && withAudio) {
+        console.log('🎤 Using custom audio - Gemini will sync video to this audio')
         
-        if (clipCount === 1) {
-          // SINGLE CLIP: Simple animation, no modifications (uses selected duration: 8-32s)
-          requestOptions.image = {
-            imageBytes: imageData,
-            mimeType: imageMimeType
-          }
-          // Use user's prompt as-is, or simple default
-          requestOptions.prompt = enhancedPrompt || 'Animate this image naturally with smooth, realistic movements'
-          console.log(`Single clip (${durationPerClip}s): Simple animation without character specifications`)
-        } else if (i === 0) {
-          // FIRST CLIP of MULTI-CLIP VIDEO: Animate image with character description for consistency
-          requestOptions.image = {
-            imageBytes: imageData,
-            mimeType: imageMimeType
-          }
-          
-          // Include character description for multi-clip consistency
-          if (characterDescription) {
-            requestOptions.prompt = `MAINTAIN THIS EXACT CHARACTER THROUGHOUT: ${characterDescription}
+        // Download audio from URL and convert to base64 if needed
+        let audioData = customAudioUrl
+        if (customAudioUrl.startsWith('http')) {
+          const audioResponse = await fetch(customAudioUrl)
+          const audioBuffer = await audioResponse.arrayBuffer()
+          audioData = Buffer.from(audioBuffer).toString('base64')
+        } else if (customAudioUrl.startsWith('data:')) {
+          // Extract base64 from data URL
+          audioData = customAudioUrl.split(',')[1]
+        }
+        
+        requestOptions.audio = {
+          audioBytes: audioData,
+          mimeType: 'audio/mpeg'
+        }
+      }
 
-${enhancedPrompt}
-
-CRITICAL: Keep the character's face, features, clothing, and appearance EXACTLY as shown in the reference image. No variations or changes to the character's appearance.`
-          } else if (enhancedPrompt) {
-            requestOptions.prompt = `${enhancedPrompt}\n\nIMPORTANT: Animate this image naturally while keeping the character's appearance exactly the same throughout.`
-          }
-          console.log(`Clip ${i + 1}/${clipCount}: First clip with character description for consistency`)
-        } else {
-          // SUBSEQUENT CLIPS: Use STRICT character description for perfect consistency
-          if (characterDescription) {
-            const characterPrompt = `EXACT CHARACTER CONTINUATION - VISUAL CONSISTENCY LOCKED:
-
-CHARACTER SPECIFICATIONS (MUST MATCH EXACTLY):
-${characterDescription}
-
-CONTINUATION RULES:
-✓ Face: IDENTICAL facial features, skin tone, expressions
-✓ Body: SAME body type, posture, proportions
-✓ Clothing: EXACT same outfit, colors, style, accessories
-✓ Background: SAME environment, lighting, setting (unless script specifies otherwise)
-✓ Camera angle: Similar perspective for natural flow
-✗ NO changes to character appearance
-✗ NO different clothing or hairstyle
-✗ NO different person or face
-
-SCENE DESCRIPTION FOR THIS CLIP:
-${enhancedPrompt}
-
-NOTE: This is a continuation. Only the character's ACTION and DIALOGUE change. Their appearance, clothing, and environment stay IDENTICAL to previous clips.`
-            requestOptions.prompt = characterPrompt
-            console.log(`Clip ${i + 1}/${clipCount}: Using ENHANCED character consistency prompt`)
-          } else {
-            // Fallback if character analysis failed
-            requestOptions.prompt = `CRITICAL CONTINUATION: This is Clip ${i + 1} of a ${clipCount}-clip sequence. The character, clothing, background, and lighting must be VISUALLY IDENTICAL to the previous clip(s). Same face, same outfit, same location. Only the character's action/dialogue changes.
-
-Scene: ${enhancedPrompt}
-
-REMINDER: Character appearance is locked from previous clips.`
-            console.log(`Clip ${i + 1}/${clipCount}: Using enhanced fallback continuation prompt`)
-          }
+      // For image-to-video mode, always use an image (user's image for clip 1, last frame for subsequent clips)
+      if (inputType === 'image-to-video' && currentImageData) {
+        requestOptions.image = {
+          imageBytes: currentImageData,
+          mimeType: currentImageMimeType
+        }
+        
+        requestOptions.prompt = enhancedPrompt || 'Animate this image naturally with smooth, realistic movements'
+        console.log(`Clip ${i + 1}/${clipCount}: Sending image with prompt`)
+        if (i > 0) {
+          console.log(`Using last frame from clip ${i} as starting image`)
         }
       } else {
         // Text-to-video mode (no image)
@@ -401,11 +432,122 @@ REMINDER: Character appearance is locked from previous clips.`
       console.log(`Clip ${i + 1} operation started:`, operation.name)
       operationNames.push(operation.name)
       
+      // WAIT for this clip to complete before starting the next one (so we can extract the last frame)
+      if (inputType === 'image-to-video' && i < clips.length - 1) {
+        console.log(`\nWaiting for clip ${i + 1} to complete before generating clip ${i + 2}...`)
+        
+        let clipComplete = false
+        let clipVideoUrl = ''
+        let attempts = 0
+        const maxAttempts = 120 // 10 minutes max (5 sec intervals)
+        
+        while (!clipComplete && attempts < maxAttempts) {
+          await new Promise(resolve => setTimeout(resolve, 5000)) // Check every 5 seconds
+          attempts++
+          
+          try {
+            // Check status using REST API
+            const statusUrl = `https://generativelanguage.googleapis.com/v1beta/${operation.name}?key=${apiKey}`
+            const statusResponse = await fetch(statusUrl)
+            
+            if (statusResponse.ok) {
+              const statusData = await statusResponse.json()
+              
+              if (statusData.done) {
+                if (statusData.error) {
+                  console.error(`Clip ${i + 1} failed:`, JSON.stringify(statusData.error, null, 2))
+                  
+                  // Check if it's a temporary error (overloaded, rate limit) vs permanent failure
+                  const errorCode = statusData.error.code
+                  const errorMessage = statusData.error.message || ''
+                  
+                  // Temporary errors - continue polling (don't throw)
+                  if (errorCode === 14 || // Overloaded
+                      errorCode === 8 ||  // Resource exhausted
+                      errorCode === 429 || // Rate limit
+                      errorMessage.includes('overloaded') ||
+                      errorMessage.includes('rate limit') ||
+                      errorMessage.includes('try again')) {
+                    console.log(`Temporary error for clip ${i + 1}, will retry...`)
+                    // Don't set clipComplete = true, continue polling
+                  } else {
+                    // Permanent error - fail
+                    throw new Error(statusData.error.message || 'Video generation failed')
+                  }
+                } else {
+                  // Extract video URL from response
+                  const response = statusData.response || statusData.result || statusData
+                  const generatedSamples = response?.generateVideoResponse?.generatedSamples || []
+                
+                  if (generatedSamples.length > 0 && generatedSamples[0].video?.uri) {
+                    clipVideoUrl = generatedSamples[0].video.uri
+                    if (!clipVideoUrl.includes('key=')) {
+                      clipVideoUrl = clipVideoUrl.includes('?') 
+                        ? `${clipVideoUrl}&key=${apiKey}`
+                        : `${clipVideoUrl}?key=${apiKey}`
+                    }
+                    clipComplete = true
+                    console.log(`Clip ${i + 1} completed after ${attempts * 5} seconds`)
+                  }
+                }
+              }
+            }
+          } catch (statusError) {
+            console.error(`Error checking status for clip ${i + 1}:`, statusError)
+            // Don't fail completely, just continue polling
+          }
+          
+          if (!clipComplete && attempts % 12 === 0) { // Every minute
+            console.log(`Still waiting for clip ${i + 1}... (${attempts * 5}s elapsed)`)
+          }
+        }
+        
+        if (!clipComplete) {
+          return NextResponse.json(
+            { success: false, error: `Clip ${i + 1} timed out after ${maxAttempts * 5} seconds` },
+            { status: 408 }
+          )
+        }
+        
+        videoUrls.push(clipVideoUrl)
+        
+        // Download the video and extract last frame for the next clip
+        console.log(`\nExtracting last frame from clip ${i + 1} for clip ${i + 2}...`)
+        const videoPath = path.join(tempDir, `clip-${sessionId}-${i}.mp4`)
+        
+        try {
+          await downloadVideo(clipVideoUrl, videoPath)
+          const lastFrame = await extractLastFrame(videoPath)
+          
+          // Update current image data for next iteration
+          currentImageData = lastFrame.base64
+          currentImageMimeType = lastFrame.mimeType
+          
+          // Debug: Check image size
+          const imageSizeKB = Math.round(lastFrame.base64.length / 1024)
+          console.log(`Last frame extracted successfully for next clip`)
+          console.log(`Extracted image size: ${imageSizeKB} KB, MIME: ${lastFrame.mimeType}`)
+          
+          // Cleanup downloaded video
+          try {
+            await unlink(videoPath)
+          } catch {}
+        } catch (extractError) {
+          console.error(`Error extracting last frame from clip ${i + 1}:`, extractError)
+          return NextResponse.json(
+            { success: false, error: `Failed to extract last frame from clip ${i + 1}` },
+            { status: 500 }
+          )
+        }
+      }
+      
       // Small delay between API calls to avoid rate limiting
       if (i < clips.length - 1) {
         await new Promise(resolve => setTimeout(resolve, 2000))
       }
     }
+    
+    console.log(`\n=== All ${clipCount} clips initiated successfully ===`)
 
     // Deduct credits after starting all generations
     await pool.query(
@@ -435,6 +577,25 @@ REMINDER: Character appearance is locked from previous clips.`
       'SELECT remaining_credits FROM credits WHERE user_id = $1',
       [user.id]
     )
+
+    // If we did sequential generation with frame extraction, videos are already ready
+    if (inputType === 'image-to-video' && videoUrls.length > 0 && videoUrls.length === clipCount) {
+      console.log(`\n=== All ${clipCount} clips completed and ready for combining ===`)
+      
+      return NextResponse.json({
+        success: true,
+        operationNames: operationNames,
+        operationName: operationNames[0],
+        clipCount: clipCount,
+        videoUrls: videoUrls, // Videos are already complete
+        allComplete: true, // Flag to indicate no need to wait
+        message: `All ${clipCount} clip${clipCount > 1 ? 's' : ''} generated successfully with smooth transitions`,
+        videoStyle,
+        duration,
+        creditsUsed: creditCost,
+        remainingCredits: updatedCredits.rows[0]?.remaining_credits || 0
+      })
+    }
 
     return NextResponse.json({
       success: true,

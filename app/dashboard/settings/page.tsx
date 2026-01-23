@@ -92,13 +92,21 @@ export default function SettingsPage() {
     }
   }
 
-  const checkInstagramConnection = () => {
-    // Check for ig_username cookie
-    const cookies = document.cookie.split(';')
-    const igCookie = cookies.find(c => c.trim().startsWith('ig_username='))
-    if (igCookie) {
-      const username = igCookie.split('=')[1]
-      setIgUsername(username)
+  const checkInstagramConnection = async () => {
+    try {
+      const response = await fetch('/api/instagram/status');
+      const data = await response.json();
+      
+      if (data.success && data.connected) {
+        setIgUsername(data.username);
+      } else {
+        setIgUsername(null);
+        // Also clear any stale cookies
+        document.cookie = 'ig_username=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
+      }
+    } catch (error) {
+      console.error('Failed to check Instagram connection:', error);
+      setIgUsername(null);
     }
   }
 
@@ -109,12 +117,23 @@ export default function SettingsPage() {
   }
 
   const handleDisconnectInstagram = async () => {
-    // Clear cookies
-    document.cookie = 'ig_access_token=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;'
-    document.cookie = 'ig_user_id=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;'
-    document.cookie = 'ig_username=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;'
-    setIgUsername(null)
-    showToast('Instagram disconnected', 'success')
+    try {
+      const response = await fetch('/api/instagram/disconnect', {
+        method: 'POST'
+      });
+      
+      const data = await response.json();
+      
+      if (data.success) {
+        setIgUsername(null);
+        showToast('Instagram disconnected successfully', 'success');
+      } else {
+        showToast(data.error || 'Failed to disconnect Instagram', 'error');
+      }
+    } catch (error) {
+      console.error('Disconnect error:', error);
+      showToast('Failed to disconnect Instagram', 'error');
+    }
   }
 
   const handleAvatarSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
