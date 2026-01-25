@@ -28,7 +28,8 @@ export async function GET(req: NextRequest) {
     const task = await client.tasks.retrieve(taskId)
 
     const status = task.status // 'PENDING', 'RUNNING', 'SUCCEEDED', 'FAILED'
-    const progress = task.progress || 0
+    const progress =
+      'progress' in task && typeof task.progress === 'number' ? task.progress : 0
 
     let response: any = {
       success: true,
