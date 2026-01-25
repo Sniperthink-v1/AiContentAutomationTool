@@ -208,8 +208,10 @@ export default function DashboardPage() {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         {stats.map((stat, index) => {
           const Icon = stat.icon
-          const isNumericChange = typeof stat.change === 'number'
-          const isPositive = isNumericChange && stat.change > 0
+          const numericChange =
+            typeof stat.change === 'number' ? stat.change : null
+          const isNumericChange = numericChange !== null
+          const isPositive = isNumericChange && numericChange > 0
           const TrendIcon = isPositive ? ArrowUpRight : ArrowDownRight
 
           return (
@@ -225,7 +227,7 @@ export default function DashboardPage() {
                 {isNumericChange ? (
                   <div className={`flex items-center gap-1 text-sm font-medium ${isPositive ? 'text-primary' : 'text-foreground-muted'} transition-all duration-300`}>
                     <TrendIcon className="w-4 h-4" />
-                    {formatPercentage(Math.abs(stat.change))}
+                    {formatPercentage(Math.abs(numericChange))}
                   </div>
                 ) : (
                   <div className="flex items-center gap-1 text-sm font-medium text-primary transition-all duration-300">

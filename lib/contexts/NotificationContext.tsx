@@ -108,6 +108,11 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
     }
   }, [])
 
+  // Dismiss a toast
+  const dismissToast = useCallback((id: string) => {
+    setToasts(prev => prev.filter(t => t.id !== id))
+  }, [])
+
   // Show a toast notification (temporary popup)
   const showToast = useCallback((toast: Omit<ToastNotification, 'id'>) => {
     const id = `toast-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
@@ -120,12 +125,7 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
     setTimeout(() => {
       dismissToast(id)
     }, duration)
-  }, [])
-
-  // Dismiss a toast
-  const dismissToast = useCallback((id: string) => {
-    setToasts(prev => prev.filter(t => t.id !== id))
-  }, [])
+  }, [dismissToast])
 
   // Send notification to server (saves to database and shows toast)
   const sendNotification = useCallback(async (params: {
