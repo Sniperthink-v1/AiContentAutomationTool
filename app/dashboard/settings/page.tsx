@@ -38,8 +38,6 @@ export default function SettingsPage() {
   // Instagram connection state
   const [igUsername, setIgUsername] = useState<string | null>(null)
   const [igConnecting, setIgConnecting] = useState(false)
-  const [igAuthBlocked, setIgAuthBlocked] = useState(false)
-  const igAuthWindowRef = useRef<Window | null>(null)
   const igStatusIntervalRef = useRef<number | null>(null)
 
   useEffect(() => {
@@ -115,30 +113,8 @@ export default function SettingsPage() {
     return false;
   }, [])
 
-  const openInstagramAuthWindow = () => {
-    const authWindow = window.open(
-      '/api/auth/instagram',
-      '_blank',
-      'noopener,noreferrer,width=700,height=800'
-    )
-
-    if (!authWindow) {
-      setIgAuthBlocked(true)
-      showToast('Popup blocked. Please allow popups and try again.', 'error')
-      return null
-    }
-
-    setIgAuthBlocked(false)
-    igAuthWindowRef.current = authWindow
-    return authWindow
-  }
-
   const handleConnectInstagram = () => {
     setIgConnecting(true)
-    const authWindow = openInstagramAuthWindow()
-    if (!authWindow) {
-      setIgConnecting(false)
-    }
   }
 
   const handleDisconnectInstagram = async () => {
@@ -174,9 +150,6 @@ export default function SettingsPage() {
       const isConnected = await checkInstagramConnection()
       if (isConnected) {
         setIgConnecting(false)
-        if (igAuthWindowRef.current && !igAuthWindowRef.current.closed) {
-          igAuthWindowRef.current.close()
-        }
       }
     }, 2000)
 
@@ -307,22 +280,18 @@ export default function SettingsPage() {
             <div className="mx-auto mb-4 h-12 w-12 rounded-full border-4 border-primary/20 border-t-primary animate-spin" />
             <h2 className="text-xl font-bold text-foreground">Connecting Instagram</h2>
             <p className="text-sm text-foreground-secondary mt-2">
-              Complete the Facebook authorization in the new window. This page
+              Complete the Facebook authorization in the new tab. This page
               will update once the connection is finished.
             </p>
-            {igAuthBlocked && (
-              <p className="text-xs text-amber-500 mt-3">
-                Popup blocked. Use the button below to open Facebook login.
-              </p>
-            )}
             <div className="mt-6 flex items-center justify-center gap-3">
-              <button
-                type="button"
-                onClick={openInstagramAuthWindow}
+              <a
+                href="/api/auth/instagram"
+                target="_blank"
+                rel="noopener noreferrer"
                 className="btn-primary"
               >
                 Open Facebook Login
-              </button>
+              </a>
               <button
                 type="button"
                 onClick={() => setIgConnecting(false)}
@@ -550,23 +519,36 @@ export default function SettingsPage() {
                       </ul>
                     </div>
 
-                    <button
-                      onClick={handleConnectInstagram}
-                      disabled={igConnecting}
-                      className="btn-primary flex items-center gap-2 bg-gradient-to-r from-purple-500 via-pink-500 to-orange-500 hover:from-purple-600 hover:via-pink-600 hover:to-orange-600"
+                    <form
+                      action="/api/auth/instagram"
+                      method="GET"
+                      target="_blank"
+                      onSubmit={(event) => {
+                        if (igConnecting) {
+                          event.preventDefault()
+                          return
+                        }
+                        handleConnectInstagram()
+                      }}
                     >
-                      {igConnecting ? (
-                        <>
-                          <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                          Connecting...
-                        </>
-                      ) : (
-                        <>
-                          <Instagram className="w-5 h-5" />
-                          Connect Instagram Account
-                        </>
-                      )}
-                    </button>
+                      <button
+                        type="submit"
+                        disabled={igConnecting}
+                        className="btn-primary flex items-center gap-2 bg-gradient-to-r from-purple-500 via-pink-500 to-orange-500 hover:from-purple-600 hover:via-pink-600 hover:to-orange-600"
+                      >
+                        {igConnecting ? (
+                          <>
+                            <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                            Connecting...
+                          </>
+                        ) : (
+                          <>
+                            <Instagram className="w-5 h-5" />
+                            Connect Instagram Account
+                          </>
+                        )}
+                      </button>
+                    </form>
                   </div>
                 )}
               </div>
