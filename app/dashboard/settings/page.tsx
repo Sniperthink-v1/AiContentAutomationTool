@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { 
   User, 
   Bell, 
@@ -38,6 +38,9 @@ export default function SettingsPage() {
   // Instagram connection state
   const [igUsername, setIgUsername] = useState<string | null>(null)
   const [igConnecting, setIgConnecting] = useState(false)
+  const [igAuthBlocked, setIgAuthBlocked] = useState(false)
+  const igAuthWindowRef = useRef<Window | null>(null)
+  const igStatusIntervalRef = useRef<number | null>(null)
 
   useEffect(() => {
     loadUser()
@@ -92,13 +95,14 @@ export default function SettingsPage() {
     }
   }
 
-  const checkInstagramConnection = async () => {
+  const checkInstagramConnection = useCallback(async () => {
     try {
       const response = await fetch('/api/instagram/status');
       const data = await response.json();
       
       if (data.success && data.connected) {
         setIgUsername(data.username);
+        return true;
       } else {
         setIgUsername(null);
         // Also clear any stale cookies
@@ -108,12 +112,33 @@ export default function SettingsPage() {
       console.error('Failed to check Instagram connection:', error);
       setIgUsername(null);
     }
+    return false;
+  }, [])
+
+  const openInstagramAuthWindow = () => {
+    const authWindow = window.open(
+      '/api/auth/instagram',
+      '_blank',
+      'noopener,noreferrer,width=700,height=800'
+    )
+
+    if (!authWindow) {
+      setIgAuthBlocked(true)
+      showToast('Popup blocked. Please allow popups and try again.', 'error')
+      return null
+    }
+
+    setIgAuthBlocked(false)
+    igAuthWindowRef.current = authWindow
+    return authWindow
   }
 
   const handleConnectInstagram = () => {
     setIgConnecting(true)
-    // Redirect to Instagram OAuth
-    window.location.href = '/api/auth/instagram'
+    const authWindow = openInstagramAuthWindow()
+    if (!authWindow) {
+      setIgConnecting(false)
+    }
   }
 
   const handleDisconnectInstagram = async () => {
@@ -135,6 +160,33 @@ export default function SettingsPage() {
       showToast('Failed to disconnect Instagram', 'error');
     }
   }
+
+  useEffect(() => {
+    if (!igConnecting) {
+      if (igStatusIntervalRef.current !== null) {
+        window.clearInterval(igStatusIntervalRef.current)
+        igStatusIntervalRef.current = null
+      }
+      return
+    }
+
+    igStatusIntervalRef.current = window.setInterval(async () => {
+      const isConnected = await checkInstagramConnection()
+      if (isConnected) {
+        setIgConnecting(false)
+        if (igAuthWindowRef.current && !igAuthWindowRef.current.closed) {
+          igAuthWindowRef.current.close()
+        }
+      }
+    }, 2000)
+
+    return () => {
+      if (igStatusIntervalRef.current !== null) {
+        window.clearInterval(igStatusIntervalRef.current)
+        igStatusIntervalRef.current = null
+      }
+    }
+  }, [igConnecting, checkInstagramConnection])
 
   const handleAvatarSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -249,6 +301,39 @@ export default function SettingsPage() {
   return (
     <div className="space-y-6 animate-fade-in">
       <ToastContainer />
+      {igConnecting && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm">
+          <div className="card p-8 w-full max-w-md text-center animate-scale-in">
+            <div className="mx-auto mb-4 h-12 w-12 rounded-full border-4 border-primary/20 border-t-primary animate-spin" />
+            <h2 className="text-xl font-bold text-foreground">Connecting Instagram</h2>
+            <p className="text-sm text-foreground-secondary mt-2">
+              Complete the Facebook authorization in the new window. This page
+              will update once the connection is finished.
+            </p>
+            {igAuthBlocked && (
+              <p className="text-xs text-amber-500 mt-3">
+                Popup blocked. Use the button below to open Facebook login.
+              </p>
+            )}
+            <div className="mt-6 flex items-center justify-center gap-3">
+              <button
+                type="button"
+                onClick={openInstagramAuthWindow}
+                className="btn-primary"
+              >
+                Open Facebook Login
+              </button>
+              <button
+                type="button"
+                onClick={() => setIgConnecting(false)}
+                className="btn-secondary"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       {/* Header */}
       <div className="animate-slide-down">
         <h1 className="text-3xl font-bold text-foreground">Settings</h1>
