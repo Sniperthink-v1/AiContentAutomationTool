@@ -71,6 +71,8 @@ function DashboardLayoutInner({
   const [user, setUser] = useState<{ firstName: string; lastName: string; email: string } | null>(null)
   const [showNotifications, setShowNotifications] = useState(false)
   const notificationRef = useRef<HTMLDivElement>(null)
+  const [isInstagramConnected, setIsInstagramConnected] = useState<boolean | null>(null)
+  const [isCheckingConnection, setIsCheckingConnection] = useState(true)
 
   // Use notification context for notifications
   const { 
@@ -98,6 +100,11 @@ function DashboardLayoutInner({
     fetchUser()
   }, [])
 
+  // Check Instagram connection on navigation
+  useEffect(() => {
+    checkInstagramConnection()
+  }, [pathname])
+
   const fetchUser = async () => {
     try {
       const response = await fetch('/api/user')
@@ -111,6 +118,20 @@ function DashboardLayoutInner({
       }
     } catch (error) {
       console.error('Failed to load user:', error)
+    }
+  }
+
+  const checkInstagramConnection = async () => {
+    setIsCheckingConnection(true)
+    try {
+      const response = await fetch('/api/instagram/status')
+      const data = await response.json()
+      setIsInstagramConnected(Boolean(data.success && data.connected))
+    } catch (error) {
+      console.error('Failed to check Instagram connection:', error)
+      setIsInstagramConnected(false)
+    } finally {
+      setIsCheckingConnection(false)
     }
   }
 
@@ -144,6 +165,9 @@ function DashboardLayoutInner({
       console.error('Logout failed:', error)
     }
   }
+
+  const shouldShowConnectMessage =
+    isInstagramConnected === false && pathname !== '/dashboard/settings'
 
   return (
     <div className="min-h-screen bg-background">
@@ -380,7 +404,20 @@ function DashboardLayoutInner({
 
         {/* Page content */}
         <main className="p-6">
-          {children}
+          {shouldShowConnectMessage ? (
+            <div className="card p-6 text-sm text-foreground-secondary">
+              Connect your Instagram account to get analytics.{' '}
+              <Link href="/dashboard/settings" className="text-primary underline">
+                Go to Settings
+              </Link>
+            </div>
+          ) : isCheckingConnection ? (
+            <div className="card p-6 text-sm text-foreground-secondary">
+              Checking Instagram connection...
+            </div>
+          ) : (
+            children
+          )}
         </main>
       </div>
     </div>

@@ -24,7 +24,7 @@ export async function POST(request: NextRequest) {
         const client = await pool.connect();
         try {
           await client.query(
-            "UPDATE social_integrations SET is_active = false, access_token = NULL WHERE platform = 'instagram' AND platform_user_id = $1",
+            "UPDATE social_integrations SET is_active = false WHERE platform = 'instagram' AND platform_user_id = $1",
             [userId]
           );
           console.log(`Deactivated Instagram connection for platform user ${userId}`);

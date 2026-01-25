@@ -17,7 +17,7 @@ export async function POST(request: NextRequest) {
 
     // Remove Instagram integration from database for this user
     const result = await pool.query(
-      "UPDATE social_integrations SET is_active = false, access_token = NULL, updated_at = NOW() WHERE user_id = $1 AND platform = 'instagram'",
+      "UPDATE social_integrations SET is_active = false, updated_at = NOW() WHERE user_id = $1 AND platform = 'instagram'",
       [user.id]
     );
 
