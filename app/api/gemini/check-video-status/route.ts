@@ -76,6 +76,17 @@ export async function GET(request: NextRequest) {
             // Check for video in the response - handle different response structures
             const response = operation.response || operation.result || operation
             
+            // Check for content policy blocks (RAI filtered)
+            const raiFilteredReasons = response?.generateVideoResponse?.raiMediaFilteredReasons || []
+            const raiFilteredCount = response?.generateVideoResponse?.raiMediaFilteredCount || 0
+            
+            if (raiFilteredCount > 0 || raiFilteredReasons.length > 0) {
+              const reason = raiFilteredReasons[0] || 'Content blocked by safety filters'
+              console.error('Video blocked by content policy:', reason)
+              results.push({ done: true, error: reason })
+              continue
+            }
+            
             // Veo 3.1 response structure: response.generateVideoResponse.generatedSamples[0].video.uri
             const generatedSamples = response?.generateVideoResponse?.generatedSamples || []
             const generatedVideos = response?.generatedVideos || response?.videos || []

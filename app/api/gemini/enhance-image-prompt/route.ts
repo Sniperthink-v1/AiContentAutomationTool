@@ -49,7 +49,7 @@ export async function POST(request: NextRequest) {
     const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY)
     
     // Try multiple models with retry logic
-    const models = ['gemini-2.5-flash', 'gemini-flash-latest', 'gemini-2.0-flash-exp']
+    const models = ['gemini-2.0-flash', 'gemini-2.0-pro']
     let lastError: any = null
     let enhancedPrompt = ''
 

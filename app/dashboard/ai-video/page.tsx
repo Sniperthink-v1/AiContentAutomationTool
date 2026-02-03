@@ -637,19 +637,23 @@ export default function AIVideoPage() {
       
       if (data.success) {
         setEnhancedScript(data.enhancedScript)
+        const maxClips = clipCount // Use the clip count we requested
         console.log('📝 Enhancement response:', { 
           hasClips: !!data.clips, 
           clipCount: data.clips?.length || 0,
+          maxClips: maxClips,
           scriptLength: data.enhancedScript?.length || 0
         })
         
         // Parse clips from the enhanced script if available
         if (data.clips && Array.isArray(data.clips) && data.clips.length > 0) {
-          console.log('✅ Using clips from API:', data.clips.length)
-          data.clips.forEach((clip: string, i: number) => {
+          // Limit to requested clip count
+          const limitedClips = data.clips.slice(0, maxClips)
+          console.log(`✅ Using clips from API: ${data.clips.length} (limited to ${limitedClips.length})`)
+          limitedClips.forEach((clip: string, i: number) => {
             console.log(`  Clip ${i + 1}: ${clip.length} chars - ${clip.substring(0, 50)}...`)
           })
-          setScriptSections(data.clips)
+          setScriptSections(limitedClips)
         } else {
           // Parse clips from enhancedScript format "Clip 1: ...\nClip 2: ..."
           console.log('🔍 Parsing clips from enhanced script text...')
@@ -679,16 +683,19 @@ export default function AIVideoPage() {
       return []
     }
     
+    // Get max clips allowed (capped at 3 for better cohesion)
+    const maxClips = getClipCountForEnhancement()
+    
     // Try primary regex pattern
     const clipRegex = /Clip\s*\d+\s*[:\-]\s*([\s\S]*?)(?=(?:Clip\s*\d+|$))/gi
     const matches = [...script.matchAll(clipRegex)]
     
     if (matches.length > 0) {
       const clips = matches.map(m => m[1].trim()).filter(clip => clip.length > 0)
-      console.log(`Parsed ${clips.length} clips from script`)
+      console.log(`Parsed ${clips.length} clips from script, limiting to ${maxClips}`)
       
-      // Validate clips aren't empty
-      const validClips = clips.filter(clip => clip.length > 20)
+      // Validate clips aren't empty and limit to maxClips
+      const validClips = clips.filter(clip => clip.length > 20).slice(0, maxClips)
       if (validClips.length > 0) {
         return validClips
       }
@@ -697,8 +704,8 @@ export default function AIVideoPage() {
     // Fallback: Split by double newlines or numbered sections
     const paragraphs = script.split(/\n{2,}/).filter(p => p.trim().length > 20)
     if (paragraphs.length > 1) {
-      console.log(`Fallback: Split script into ${paragraphs.length} paragraphs`)
-      return paragraphs
+      console.log(`Fallback: Split script into ${paragraphs.length} paragraphs, limiting to ${maxClips}`)
+      return paragraphs.slice(0, maxClips)
     }
     
     // If no clip format found, return the whole script as single clip

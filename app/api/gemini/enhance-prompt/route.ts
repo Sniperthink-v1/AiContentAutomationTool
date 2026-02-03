@@ -48,8 +48,8 @@ export async function POST(request: NextRequest) {
     // Initialize Gemini AI
     const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY)
     
-    // Try multiple models with retry logic (using December 2024+ model names)
-    const models = ['gemini-1.5-flash-002', 'gemini-1.5-pro-002', 'gemini-2.0-flash-exp']
+    // Try multiple models with retry logic (using stable model names)
+    const models = ['gemini-2.0-flash', 'gemini-2.0-pro']
     let lastError: any = null
     let enhancedScript = ''
     let clips: string[] = []
@@ -165,7 +165,7 @@ Now enhance the user's prompt following these guidelines to create ONE cohesive,
 `
       } else {
         enhancementInstruction = `
-You are a professional video script writer. Enhance the following video idea based on the user's CUSTOM ENHANCEMENT INSTRUCTIONS while PRESERVING EVERY DETAIL.
+You are a professional video script writer and cinematographer. Create a DETAILED, CINEMATIC video script based on the user's idea and their custom enhancement instructions.
 
 User's video idea: "${prompt}"
 
@@ -173,23 +173,51 @@ User's custom enhancement instructions: "${customInstructions}"
 
 Video settings:
 - Style: ${settings?.style || 'cinematic'}
-- Duration: ${settings?.duration || 30} seconds
+- Duration: ${settings?.duration || 8} seconds (this is a single clip)
 ${noCaptionsInstruction}
 
-CRITICAL PRESERVATION RULES:
-1. PRESERVE ALL DIALOGUE: Include any dialogue, quotes, or speech WORD-FOR-WORD in quotation marks
-2. PRESERVE ALL ACTIONS: Keep every action, movement, gesture, and activity described
-3. PRESERVE ALL DESCRIPTIONS: Keep all visual details, colors, clothing, settings mentioned
-4. PRESERVE CHARACTERS: Maintain all character names, personalities, and traits
-5. PRESERVE LOCATIONS: Keep all environments, settings, and places exactly as described
-6. ONLY ENHANCE: Add camera movements, lighting details, and cinematic refinements
-7. Apply the user's custom enhancement instructions
-8. Add technical details that support the user's vision
-${noCaptions ? '9. NO text overlays, titles, captions, or on-screen text' : ''}
+🎯 YOUR TASK: Create ONE detailed, professional video script that:
 
-${videoStyle === 'dialogue' ? 'DIALOGUE FORMAT: Include all spoken words with character names. Example: John: "Hello there!" Mary: "Hi!"' : ''}
+1. **PRESERVES** all user content (dialogue, actions, characters, settings)
+2. **APPLIES** the user's custom enhancement instructions
+3. **ADDS** rich cinematic details (camera work, lighting, atmosphere, sound)
 
-Output a COMPLETE, detailed script that preserves ALL user content (dialogue, actions, descriptions) and adds professional cinematic enhancements.
+📋 OUTPUT FORMAT - USE THIS EXACT FORMAT:
+
+**Clip 1**:
+
+**Scene:** [Detailed location description - specific place, environment, time of day, weather, atmosphere. Be vivid and specific, not generic.]
+
+**Characters:** [Full character descriptions - appearance, clothing details, positioning, body language, facial expressions]
+
+**Action:** [Step-by-step action sequence with specific movements, gestures, physical activities. Time each beat for ${settings?.duration || 8} seconds total.]
+
+**Dialogue:** [If any speech, include it word-for-word in quotes with character name: Character: "Exact words"]
+
+**Camera Work:** 
+- Shot Type: [Wide/Medium/Close-up/Extreme close-up]
+- Angle: [Eye-level/Low angle/High angle/Dutch tilt]
+- Movement: [Static/Pan/Tilt/Dolly/Tracking/Zoom]
+- Specific instructions: [Describe exactly how camera captures the action]
+
+**Lighting:** [Light source, quality, direction, color temperature, shadows, mood it creates]
+
+**Sound Design:** [Ambient sounds, music style/tempo, sound effects, dialogue delivery tone]
+
+**Mood/Atmosphere:** [Emotional tone, visual style, color grading suggestions]
+
+🎬 QUALITY REQUIREMENTS:
+
+✅ Script must be DETAILED enough to visualize every second
+✅ Include specific, vivid descriptions (not vague or generic)
+✅ Camera directions should be professional and achievable
+✅ Every element should serve the story/user's vision
+✅ Should feel like a real film production script
+
+${videoStyle === 'dialogue' ? '📝 DIALOGUE: All spoken words must be preserved exactly: Character: "word-for-word dialogue"' : ''}
+${noCaptions ? '⚠️ NO TEXT: Do not include any text overlays, titles, captions, or on-screen text' : ''}
+
+Now write the complete, detailed video script:
 `
       }
     } else if (isVeo && clipCount > 1) {
@@ -498,13 +526,18 @@ Now enhance the user's video idea following these guidelines. Output ONE complet
     }
 
     // Parse clips from the enhanced script for Veo 3.1
-    if (isVeo && clipCount > 1) {
+    if (isVeo) {
       // Try multiple parsing strategies to handle different AI formatting
       const clipRegex = /Clip\s*(\d+)\s*[:\-]\s*([\s\S]*?)(?=(?:Clip\s*\d+|$))/gi
       const matches = [...enhancedScript.matchAll(clipRegex)]
       
       if (matches.length > 0) {
         clips = matches.map(m => m[2].trim()).filter(clip => clip.length > 0)
+        // IMPORTANT: Limit clips to the requested clipCount (max 3 for better cohesion)
+        if (clips.length > clipCount) {
+          console.log(`⚠️ AI generated ${clips.length} clips but requested ${clipCount}, trimming...`)
+          clips = clips.slice(0, clipCount)
+        }
         console.log(`📋 Parsed ${clips.length} clips from enhanced script:`)
         clips.forEach((clip, i) => {
           console.log(`Clip ${i + 1} length: ${clip.length} chars`)
@@ -512,14 +545,13 @@ Now enhance the user's video idea following these guidelines. Output ONE complet
         })
       }
       
-      // If parsing failed or got empty clips, split by double newlines as fallback
+      // If parsing failed or got empty clips, use enhanced script as single clip
       if (clips.length === 0 || clips.some(c => c.length < 20)) {
-        console.log('⚠️ Clip parsing failed, using fallback method')
-        const lines = enhancedScript.split(/\n{2,}/).filter(line => line.trim().length > 20)
-        if (lines.length >= clipCount) {
-          clips = lines.slice(0, clipCount)
-          console.log(`📋 Fallback: Split into ${clips.length} clips by paragraphs`)
-        }
+        console.log('⚠️ Clip parsing failed, using enhanced script as single clip')
+        // Clean up the script - remove "Clip 1:" prefix if present
+        let cleanScript = enhancedScript.replace(/^\*\*Clip\s*\d+\*\*:?\s*/i, '').trim()
+        clips = [cleanScript]
+        console.log(`📋 Using full script as single clip (${cleanScript.length} chars)`)
       }
     }
 
