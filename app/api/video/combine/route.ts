@@ -86,10 +86,16 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Use /tmp on Vercel (serverless), fallback to cwd/tmp locally
+    const isVercel = process.env.VERCEL === '1' || process.env.VERCEL_ENV
+    const getTempDir = () => isVercel 
+      ? '/tmp/video-combine' 
+      : path.join(process.cwd(), 'tmp', 'video-combine')
+
     // If only one video, download, upload to R2, and return
     if (videoUrls.length === 1) {
       // Download single video
-      const tempDir = path.join(process.cwd(), 'tmp', 'video-combine')
+      const tempDir = getTempDir()
       if (!existsSync(tempDir)) {
         await mkdir(tempDir, { recursive: true })
       }
@@ -133,7 +139,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Create temp directory if it doesn't exist
-    const tempDir = path.join(process.cwd(), 'tmp', 'video-combine')
+    const tempDir = getTempDir()
     if (!existsSync(tempDir)) {
       await mkdir(tempDir, { recursive: true })
     }

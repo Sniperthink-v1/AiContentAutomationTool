@@ -53,7 +53,11 @@ export async function POST(request: NextRequest) {
     }
 
     // Create temp directory
-    const tempDir = path.join(process.cwd(), 'tmp', 'audio-sync')
+    // Use /tmp on Vercel (serverless), fallback to cwd/tmp locally
+    const isVercel = process.env.VERCEL === '1' || process.env.VERCEL_ENV
+    const tempDir = isVercel 
+      ? '/tmp/audio-sync' 
+      : path.join(process.cwd(), 'tmp', 'audio-sync')
     if (!existsSync(tempDir)) {
       await mkdir(tempDir, { recursive: true })
     }

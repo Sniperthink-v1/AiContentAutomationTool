@@ -266,9 +266,22 @@ export async function POST(request: NextRequest) {
     } = body
 
     // Determine clips to generate
-    const clips = scriptSections && scriptSections.length > 0 
-      ? scriptSections 
-      : [prompt]
+    // For Veo 3.1, max duration per clip is 8s, so split longer durations into multiple clips
+    const maxClipDuration = 8
+    const requestedClipCount = Math.ceil(duration / maxClipDuration)
+    
+    let clips: string[] = []
+    if (scriptSections && scriptSections.length > 0) {
+      // User provided multiple clip descriptions
+      clips = scriptSections
+    } else if (prompt && requestedClipCount > 1) {
+      // Single prompt but long duration - duplicate the prompt for each clip
+      // This ensures 16s = 2 clips, 24s = 3 clips, 32s = 4 clips
+      console.log(`Auto-splitting into ${requestedClipCount} clips for ${duration}s duration`)
+      clips = Array(requestedClipCount).fill(prompt)
+    } else {
+      clips = [prompt]
+    }
     
     const clipCount = clips.length
 
@@ -340,7 +353,12 @@ export async function POST(request: NextRequest) {
     const videoUrls: string[] = []
     
     // Create temp directory for video processing
-    const tempDir = path.join(process.cwd(), 'tmp', 'video-frames')
+    // Use /tmp on Vercel (serverless), fallback to cwd/tmp locally
+    const isVercel = process.env.VERCEL === '1' || process.env.VERCEL_ENV
+    const tempDir = isVercel 
+      ? '/tmp/video-frames' 
+      : path.join(process.cwd(), 'tmp', 'video-frames')
+    
     if (!existsSync(tempDir)) {
       await mkdir(tempDir, { recursive: true })
     }

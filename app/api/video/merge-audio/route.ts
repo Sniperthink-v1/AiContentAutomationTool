@@ -46,7 +46,9 @@ export async function POST(req: NextRequest) {
     })
 
     // Create temp directory
-    const tempDir = path.join(process.cwd(), 'tmp')
+    // Use /tmp on Vercel (serverless), fallback to cwd/tmp locally
+    const isVercel = process.env.VERCEL === '1' || process.env.VERCEL_ENV
+    const tempDir = isVercel ? '/tmp' : path.join(process.cwd(), 'tmp')
     if (!existsSync(tempDir)) {
       await mkdir(tempDir, { recursive: true })
     }
