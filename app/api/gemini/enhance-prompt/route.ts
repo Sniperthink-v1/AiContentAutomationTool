@@ -527,27 +527,83 @@ Now enhance the user's video idea following these guidelines. Output ONE complet
 
     // Parse clips from the enhanced script for Veo 3.1
     if (isVeo) {
-      // Try multiple parsing strategies to handle different AI formatting
-      const clipRegex = /Clip\s*(\d+)\s*[:\-]\s*([\s\S]*?)(?=(?:Clip\s*\d+|$))/gi
-      const matches = [...enhancedScript.matchAll(clipRegex)]
+      console.log(`🔍 Parsing clips from enhanced script (total: ${enhancedScript.length} chars, expecting ${clipCount} clips)`)
       
-      if (matches.length > 0) {
-        clips = matches.map(m => m[2].trim()).filter(clip => clip.length > 0)
+      // Try multiple parsing strategies to handle different AI formatting
+      
+      // Strategy 1: Match **Clip N**: or **Clip N** or Clip N: patterns
+      let clipMatches: string[] = []
+      
+      // Pattern 1: **Clip N**: (most common format)
+      const pattern1 = /\*\*Clip\s*(\d+)\*\*\s*:?\s*([\s\S]*?)(?=\*\*Clip\s*\d+\*\*|$)/gi
+      const matches1 = [...enhancedScript.matchAll(pattern1)]
+      if (matches1.length > 0) {
+        clipMatches = matches1.map(m => m[2].trim()).filter(clip => clip.length > 20)
+        console.log(`📋 Pattern 1 (**Clip N**:) found ${clipMatches.length} clips`)
+      }
+      
+      // Pattern 2: Clip N: (without asterisks)
+      if (clipMatches.length < 2) {
+        const pattern2 = /(?:^|\n)\s*Clip\s*(\d+)\s*[:\-]\s*([\s\S]*?)(?=(?:^|\n)\s*Clip\s*\d+|$)/gim
+        const matches2 = [...enhancedScript.matchAll(pattern2)]
+        if (matches2.length > clipMatches.length) {
+          clipMatches = matches2.map(m => m[2].trim()).filter(clip => clip.length > 20)
+          console.log(`📋 Pattern 2 (Clip N:) found ${clipMatches.length} clips`)
+        }
+      }
+      
+      // Pattern 3: Numbered sections (1. / 2. / etc.)
+      if (clipMatches.length < 2) {
+        const pattern3 = /(?:^|\n)\s*(\d+)\.\s*([\s\S]*?)(?=(?:^|\n)\s*\d+\.|$)/gim
+        const matches3 = [...enhancedScript.matchAll(pattern3)]
+        if (matches3.length > clipMatches.length) {
+          clipMatches = matches3.map(m => m[2].trim()).filter(clip => clip.length > 20)
+          console.log(`📋 Pattern 3 (N.) found ${clipMatches.length} clips`)
+        }
+      }
+      
+      // Pattern 4: Split by "Scene" sections
+      if (clipMatches.length < 2 && enhancedScript.includes('**Scene')) {
+        const pattern4 = /\*\*Scene\s*\d*\*\*:?\s*([\s\S]*?)(?=\*\*Scene\s*\d*\*\*|$)/gi
+        const matches4 = [...enhancedScript.matchAll(pattern4)]
+        if (matches4.length > clipMatches.length) {
+          clipMatches = matches4.map(m => m[1].trim()).filter(clip => clip.length > 20)
+          console.log(`📋 Pattern 4 (**Scene**) found ${clipMatches.length} clips`)
+        }
+      }
+      
+      // If we found clips, use them
+      if (clipMatches.length >= 2) {
+        clips = clipMatches
         // IMPORTANT: Limit clips to the requested clipCount (max 3 for better cohesion)
         if (clips.length > clipCount) {
           console.log(`⚠️ AI generated ${clips.length} clips but requested ${clipCount}, trimming...`)
           clips = clips.slice(0, clipCount)
         }
-        console.log(`📋 Parsed ${clips.length} clips from enhanced script:`)
+        console.log(`✅ Parsed ${clips.length} clips from enhanced script:`)
         clips.forEach((clip, i) => {
-          console.log(`Clip ${i + 1} length: ${clip.length} chars`)
-          console.log(`Clip ${i + 1} preview: ${clip.substring(0, 100)}...`)
+          console.log(`  Clip ${i + 1}: ${clip.length} chars - "${clip.substring(0, 80)}..."`)
         })
+      } else if (clipCount > 1) {
+        // Last resort: Split the script evenly into requested number of clips
+        console.log(`⚠️ No clip patterns found, splitting script into ${clipCount} equal parts`)
+        const cleanScript = enhancedScript.replace(/^\*\*Clip\s*\d+\*\*:?\s*/gi, '').trim()
+        const chunkSize = Math.ceil(cleanScript.length / clipCount)
+        clips = []
+        for (let i = 0; i < clipCount; i++) {
+          const start = i * chunkSize
+          const end = Math.min(start + chunkSize, cleanScript.length)
+          const chunk = cleanScript.substring(start, end).trim()
+          if (chunk.length > 0) {
+            clips.push(chunk)
+          }
+        }
+        console.log(`📋 Split into ${clips.length} equal parts`)
       }
       
-      // If parsing failed or got empty clips, use enhanced script as single clip
-      if (clips.length === 0 || clips.some(c => c.length < 20)) {
-        console.log('⚠️ Clip parsing failed, using enhanced script as single clip')
+      // If parsing still failed or got empty clips, use enhanced script as single clip
+      if (clips.length === 0 || clips.every(c => c.length < 20)) {
+        console.log('⚠️ All parsing failed, using enhanced script as single clip')
         // Clean up the script - remove "Clip 1:" prefix if present
         let cleanScript = enhancedScript.replace(/^\*\*Clip\s*\d+\*\*:?\s*/i, '').trim()
         clips = [cleanScript]
