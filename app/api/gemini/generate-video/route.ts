@@ -270,20 +270,25 @@ export async function POST(request: NextRequest) {
     const maxClipDuration = 8
     const requestedClipCount = Math.ceil(duration / maxClipDuration)
     
+    console.log(`Request received: duration=${duration}s, requestedClipCount=${requestedClipCount}, scriptSections=${scriptSections?.length || 0}`)
+    
     let clips: string[] = []
-    if (scriptSections && scriptSections.length > 0) {
+    if (scriptSections && Array.isArray(scriptSections) && scriptSections.length > 0) {
       // User provided multiple clip descriptions
       clips = scriptSections
+      console.log(`Using ${clips.length} script sections from user`)
     } else if (prompt && requestedClipCount > 1) {
       // Single prompt but long duration - duplicate the prompt for each clip
       // This ensures 16s = 2 clips, 24s = 3 clips, 32s = 4 clips
-      console.log(`Auto-splitting into ${requestedClipCount} clips for ${duration}s duration`)
       clips = Array(requestedClipCount).fill(prompt)
+      console.log(`Auto-splitting single prompt into ${clips.length} clips for ${duration}s duration`)
     } else {
       clips = [prompt]
+      console.log(`Using single clip with prompt`)
     }
     
     const clipCount = clips.length
+    console.log(`Final clip count: ${clipCount}`)
 
     // For image-to-video, a prompt is optional (we'll use the character description)
     // For text-to-video, a prompt is required
@@ -300,9 +305,12 @@ export async function POST(request: NextRequest) {
     }
 
     // Calculate credit cost (15 credits per second for Veo 3.1)
-    // Divide the selected duration evenly among all clips
-    const durationPerClip = Math.ceil(duration / clipCount)
+    // Veo 3.1 Fast supports 4-8 seconds per clip only
+    // For longer total durations, we use multiple 8-second clips
+    const durationPerClip = Math.min(8, Math.ceil(duration / clipCount)) // Cap at 8 seconds max
     const creditCost = 15 * clipCount * durationPerClip
+    
+    console.log(`Duration calculation: total=${duration}s, clips=${clipCount}, perClip=${durationPerClip}s`)
 
     // Check user credits
     const creditsResult = await pool.query(
