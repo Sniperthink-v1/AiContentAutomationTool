@@ -438,22 +438,64 @@ export default function AIPhotosPage() {
           : `/dashboard/posts?imageUrl=${encodeURIComponent(imageUrl)}`
         window.location.href = scheduleUrl
       } else if (action === 'now') {
-        // Post immediately
-        const endpoint = saveType === 'story' ? '/api/stories' : '/api/posts'
-        const postResponse = await fetch(endpoint, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            imageUrl,
-            caption: prompt || enhancedPrompt || 'AI Generated Image',
-            scheduledFor: new Date().toISOString()
-          })
-        })
+        // Post immediately to Instagram
+        showToast('Posting to Instagram...', 'info')
+        
+        // Check if the URL is publicly accessible (not base64)
+        if (imageUrl.startsWith('data:')) {
+          showToast('Instagram requires files to be uploaded to cloud storage. Please configure Supabase.', 'error')
+          setIsSaving(false)
+          return
+        }
 
-        const postData = await postResponse.json()
-        if (postData.success) {
-          showToast(`Posted to ${saveType} successfully!`, 'success')
-          setShowSaveModal(false)
+        const captionText = prompt || enhancedPrompt || 'AI Generated Image'
+        
+        if (saveType === 'story') {
+          // Post as story
+          const postResponse = await fetch('/api/instagram/post', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              type: 'story',
+              mediaUrl: imageUrl,
+              isVideo: false
+            })
+          })
+
+          const postData = await postResponse.json()
+          if (postData.success) {
+            showToast('Story posted to Instagram! 🎉', 'success')
+            setShowSaveModal(false)
+          } else {
+            if (postData.error?.includes('not connected')) {
+              showToast('Instagram account not connected. Please connect in Settings.', 'error')
+            } else {
+              showToast('Failed to post story: ' + postData.error, 'error')
+            }
+          }
+        } else {
+          // Post as regular post
+          const postResponse = await fetch('/api/instagram/post', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              type: 'image',
+              mediaUrl: imageUrl,
+              caption: captionText
+            })
+          })
+
+          const postData = await postResponse.json()
+          if (postData.success) {
+            showToast('Posted to Instagram! 🎉', 'success')
+            setShowSaveModal(false)
+          } else {
+            if (postData.error?.includes('not connected')) {
+              showToast('Instagram account not connected. Please connect in Settings.', 'error')
+            } else {
+              showToast('Failed to post: ' + postData.error, 'error')
+            }
+          }
         }
       }
     } catch (error) {

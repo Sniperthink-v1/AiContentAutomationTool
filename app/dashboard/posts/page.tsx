@@ -280,33 +280,78 @@ export default function PostsPage() {
           }
         }
       } else if (action === 'now') {
-        // Post immediately (would integrate with Instagram API in production)
-        const response = await fetch('/api/drafts/save', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            originalPrompt: caption,
-            enhancedScript: fullCaption,
-            videoUrl: postType === 'video' ? fileUrl : null,
-            thumbnailUrl: postType === 'image' ? fileUrl : null,
-            settings: {
-              postType,
-              hashtags,
-              location,
-              mentions,
-              status: 'posted'
-            }
-          })
-        })
+        // Post immediately to Instagram
+        showToast('Posting to Instagram...', 'info')
+        
+        // Determine post type and media URL
+        const mediaUrl = postType === 'video' ? fileUrl : fileUrl
+        const igPostType = postType === 'video' ? 'reel' : 'image'
+        
+        // Check if we have a media URL (either from upload or existing URL)
+        if (!mediaUrl) {
+          showToast('Please select a file to post', 'error')
+          setIsSaving(false)
+          return
+        }
 
-        const data = await response.json()
-        if (data.success) {
-          showToast('Post published successfully!', 'success')
-          resetForm()
-          setShowCreateModal(false)
-          // In production, this would call Instagram Graph API to actually post
-        } else {
-          showToast('Failed to publish post: ' + data.error, 'error')
+        // Check if it's a base64 URL - Instagram requires publicly accessible URLs
+        if (mediaUrl.startsWith('data:')) {
+          showToast('Instagram requires files to be uploaded to cloud storage. Please configure Supabase for file hosting.', 'error')
+          setIsSaving(false)
+          return
+        }
+
+        try {
+          // Call Instagram API to post
+          const postResponse = await fetch('/api/instagram/post', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              type: igPostType,
+              mediaUrl: mediaUrl,
+              caption: fullCaption
+            })
+          })
+
+          const postData = await postResponse.json()
+          
+          if (postData.success) {
+            // Save to drafts as published
+            const saveResponse = await fetch('/api/drafts/save', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                id: currentDraftId,
+                originalPrompt: caption,
+                enhancedScript: fullCaption,
+                videoUrl: postType === 'video' ? fileUrl : null,
+                thumbnailUrl: postType === 'image' ? fileUrl : null,
+                settings: {
+                  postType,
+                  hashtags,
+                  location,
+                  mentions,
+                  status: 'posted',
+                  instagramMediaId: postData.mediaId
+                }
+              })
+            })
+
+            showToast('Successfully posted to Instagram! 🎉', 'success')
+            loadDrafts()
+            resetForm()
+            setShowCreateModal(false)
+          } else {
+            // Check for common errors
+            if (postData.error?.includes('not connected')) {
+              showToast('Instagram account not connected. Please connect in Settings.', 'error')
+            } else {
+              showToast('Failed to post to Instagram: ' + postData.error, 'error')
+            }
+          }
+        } catch (error) {
+          console.error('Instagram posting error:', error)
+          showToast('Failed to connect to Instagram. Please check your connection.', 'error')
         }
       }
     } catch (error) {
