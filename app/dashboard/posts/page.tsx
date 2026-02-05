@@ -42,60 +42,11 @@ interface Draft {
   thumbnailUrl: string | null
   status: string
   scheduledDate?: string
+  postedAt?: string
+  instagramMediaId?: string
   settings: any
   createdAt: string
 }
-
-const posts = [
-  { 
-    id: 1, 
-    type: 'image', 
-    thumbnail: '🌅', 
-    caption: 'Beautiful sunset vibes #sunset #nature', 
-    status: 'published',
-    scheduledAt: null,
-    publishedAt: '2 hours ago',
-    likes: 1240,
-    comments: 89,
-    reach: 5420
-  },
-  { 
-    id: 2, 
-    type: 'video', 
-    thumbnail: '🎬', 
-    caption: 'Behind the scenes of our latest project', 
-    status: 'scheduled',
-    scheduledAt: 'Tomorrow at 3:00 PM',
-    publishedAt: null,
-    likes: 0,
-    comments: 0,
-    reach: 0
-  },
-  { 
-    id: 3, 
-    type: 'image', 
-    thumbnail: '🎨', 
-    caption: 'New art collection drop', 
-    status: 'published',
-    scheduledAt: null,
-    publishedAt: '1 day ago',
-    likes: 2130,
-    comments: 156,
-    reach: 8920
-  },
-  { 
-    id: 4, 
-    type: 'draft', 
-    thumbnail: '📝', 
-    caption: 'Work in progress...', 
-    status: 'draft',
-    scheduledAt: null,
-    publishedAt: null,
-    likes: 0,
-    comments: 0,
-    reach: 0
-  },
-]
 
 export default function PostsPage() {
   const { showToast, ToastContainer } = useToast()
@@ -123,9 +74,7 @@ export default function PostsPage() {
   
   // Load drafts from database
   useEffect(() => {
-    if (filter === 'draft' || filter === 'scheduled') {
-      loadDrafts()
-    }
+    loadDrafts()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filter])
 
@@ -151,10 +100,11 @@ export default function PostsPage() {
   const loadDrafts = async () => {
     setIsLoadingDrafts(true)
     try {
-      // Map filter to status
+      // Map filter to status (empty means load all)
       let status = ''
       if (filter === 'draft') status = 'draft'
       if (filter === 'scheduled') status = 'scheduled'
+      if (filter === 'published') status = 'published'
       
       const url = status ? `/api/drafts/list?status=${status}` : '/api/drafts/list'
       const response = await fetch(url)
@@ -514,10 +464,6 @@ export default function PostsPage() {
     }
   }
 
-  const filteredPosts = filter === 'all' 
-    ? posts 
-    : posts.filter(post => post.status === filter)
-
   return (
     <div className="space-y-6 animate-fade-in">
       <ToastContainer />
@@ -556,8 +502,8 @@ export default function PostsPage() {
 
       {/* Posts Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {/* Show drafts from database when Draft or Scheduled filter is selected */}
-        {(filter === 'draft' || filter === 'scheduled') && drafts.map((draft, index) => (
+        {/* Show all posts from database */}
+        {drafts.map((draft, index) => (
           <div key={draft.id} className="card card-hover group animate-scale-in" style={{ animationDelay: `${index * 100}ms` }}>
             {/* Thumbnail */}
             <div className="relative aspect-square bg-background-tertiary rounded-t-lg flex items-center justify-center overflow-hidden transition-all duration-300 group-hover:scale-105">
@@ -582,6 +528,118 @@ export default function PostsPage() {
                     className="p-2 bg-background-secondary rounded-lg hover:bg-red-500 transition-all duration-300 hover:scale-110"
                   >
                     <Trash2 className="w-5 h-5" />
+                  </button>
+                </div>
+              </div>
+              
+              {/* Status Badge */}
+              <div className="absolute top-3 right-3">
+                <span className={`px-3 py-1 text-xs font-medium rounded-full border backdrop-blur-sm ${
+                  draft.status === 'published' 
+                    ? 'bg-green-500/20 text-green-500 border-green-500/30'
+                    : draft.status === 'scheduled'
+                    ? 'bg-blue-500/20 text-blue-500 border-blue-500/30'
+                    : 'bg-yellow-500/20 text-yellow-500 border-yellow-500/30'
+                }`}>
+                  {draft.status.charAt(0).toUpperCase() + draft.status.slice(1)}
+                </span>
+              </div>
+
+              {/* Type Icon */}
+              <div className="absolute top-3 left-3">
+                <div className="p-2 bg-background-secondary/80 backdrop-blur-sm rounded-lg">
+                  {draft.videoUrl ? (
+                    <Video className="w-4 h-4 text-primary" />
+                  ) : (
+                    <ImageIcon className="w-4 h-4 text-primary" />
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Content */}
+            <div className="p-4 space-y-3">
+              <p className="text-sm text-foreground line-clamp-2">
+                {draft.originalPrompt || 'AI Generated Video'}
+              </p>
+              
+              {/* Show posted time if published */}
+              {draft.status === 'published' && draft.postedAt && (
+                <div className="text-xs text-foreground-secondary">
+                  Posted {new Date(draft.postedAt).toLocaleDateString()}
+                </div>
+              )}
+
+              {/* Show scheduled time if scheduled */}
+              {draft.status === 'scheduled' && draft.scheduledDate && (
+                <div className="flex items-center gap-1 text-xs text-blue-500">
+                  <Clock className="w-3 h-3" />
+                  {new Date(draft.scheduledDate).toLocaleString('en-US', {
+                    month: 'short',
+                    day: 'numeric',
+                    hour: 'numeric',
+                    minute: '2-digit',
+                    hour12: true
+                  })}
+                </div>
+              )}
+
+              {/* Show created time for drafts */}
+              {draft.status === 'draft' && (
+                <div className="text-xs text-foreground-secondary">
+                  Created {new Date(draft.createdAt).toLocaleDateString()}
+                </div>
+              )}
+
+              {/* Actions based on status */}
+              <div className="flex gap-2 pt-2">
+                {draft.status === 'published' ? (
+                  <a 
+                    href={draft.instagramMediaId ? `https://www.instagram.com/p/${draft.instagramMediaId}` : '#'}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex-1 px-4 py-2 bg-primary hover:bg-primary-hover text-primary-foreground rounded-lg text-sm font-medium transition-all duration-300 flex items-center justify-center gap-2 hover:scale-105"
+                  >
+                    View on Instagram
+                  </a>
+                ) : (
+                  <>
+                    <button 
+                      onClick={() => handleEditDraft(draft)}
+                      className="flex-1 px-4 py-2 bg-background-tertiary hover:bg-primary/20 text-foreground hover:text-primary rounded-lg text-sm font-medium transition-all duration-300 hover:scale-105"
+                    >
+                      Edit
+                    </button>
+                    {draft.status === 'scheduled' ? (
+                      <button 
+                        onClick={() => handlePostNow(draft)}
+                        className="flex-1 px-4 py-2 bg-primary hover:bg-primary-hover text-primary-foreground rounded-lg text-sm font-medium transition-all duration-300 flex items-center justify-center gap-2 hover:scale-105"
+                      >
+                        <Send className="w-4 h-4" />
+                        Post Now
+                      </button>
+                    ) : (
+                      <button 
+                        onClick={() => {
+                          setCurrentDraftId(draft.id)
+                          setShowScheduleModal(true)
+                        }}
+                        className="flex-1 px-4 py-2 bg-primary hover:bg-primary-hover text-primary-foreground rounded-lg text-sm font-medium transition-all duration-300 flex items-center justify-center gap-2 hover:scale-105"
+                      >
+                        <Clock className="w-4 h-4" />
+                        Schedule
+                      </button>
+                    )}
+                  </>
+                )}
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Empty State */}
+      {drafts.length === 0 && !isLoadingDrafts && (
                   </button>
                 </div>
               </div>
@@ -661,139 +719,39 @@ export default function PostsPage() {
             </div>
           </div>
         ))}
-
-        {/* Show regular posts for other filters */}
-        {filter !== 'draft' && filteredPosts.map((post, index) => (
-          <div key={post.id} className="card card-hover group animate-scale-in" style={{ animationDelay: `${index * 100}ms` }}>
-            {/* Thumbnail */}
-            <div className="relative aspect-square bg-background-tertiary rounded-t-lg flex items-center justify-center text-7xl overflow-hidden transition-all duration-300 group-hover:scale-105">
-              {post.thumbnail}
-              <div className="absolute inset-0 bg-black/0 group-hover:bg-black/60 transition-all duration-300 flex items-center justify-center opacity-0 group-hover:opacity-100">
-                <div className="flex gap-2 scale-75 group-hover:scale-100 transition-transform duration-300">
-                  <button className="p-2 bg-background-secondary rounded-lg hover:bg-primary transition-all duration-300 hover:scale-110">
-                    <Edit className="w-5 h-5" />
-                  </button>
-                  <button className="p-2 bg-background-secondary rounded-lg hover:bg-primary transition-all duration-300 hover:scale-110">
-                    <Trash2 className="w-5 h-5" />
-                  </button>
-                </div>
-              </div>
-              
-              {/* Status Badge */}
-              <div className="absolute top-3 right-3 animate-slide-left">
-                {post.status === 'published' && (
-                  <span className="px-3 py-1 bg-primary/20 text-primary text-xs font-medium rounded-full border border-primary/30 backdrop-blur-sm">
-                    Published
-                  </span>
-                )}
-                {post.status === 'scheduled' && (
-                  <span className="px-3 py-1 bg-primary/20 text-primary text-xs font-medium rounded-full border border-primary/30 backdrop-blur-sm">
-                    Scheduled
-                  </span>
-                )}
-                {post.status === 'draft' && (
-                  <span className="px-3 py-1 bg-foreground-muted/20 text-foreground-muted text-xs font-medium rounded-full border border-foreground-muted/30 backdrop-blur-sm">
-                    Draft
-                  </span>
-                )}
-              </div>
-
-              {/* Type Icon */}
-              <div className="absolute top-3 left-3 animate-slide-right">
-                {post.type === 'video' && (
-                  <div className="p-2 bg-background-secondary/80 backdrop-blur-sm rounded-lg transition-all duration-300 group-hover:scale-110">
-                    <Video className="w-4 h-4 text-primary" />
-                  </div>
-                )}
-                {post.type === 'image' && (
-                  <div className="p-2 bg-background-secondary/80 backdrop-blur-sm rounded-lg transition-all duration-300 group-hover:scale-110">
-                    <ImageIcon className="w-4 h-4 text-primary" />
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Content */}
-            <div className="p-4 space-y-3">
-              <p className="text-sm text-foreground line-clamp-2">{post.caption}</p>
-              
-              {post.status === 'scheduled' && post.scheduledAt && (
-                <div className="flex items-center gap-2 text-xs text-primary animate-pulse-soft">
-                  <Clock className="w-4 h-4" />
-                  {post.scheduledAt}
-                </div>
-              )}
-
-              {post.status === 'published' && post.publishedAt && (
-                <div className="text-xs text-foreground-secondary">
-                  Posted {post.publishedAt}
-                </div>
-              )}
-
-              {/* Stats */}
-              {post.status === 'published' && (
-                <div className="grid grid-cols-3 gap-2 pt-3 border-t border-border">
-                  <div className="text-center">
-                    <div className="text-sm font-bold text-foreground">{formatNumber(post.likes)}</div>
-                    <div className="text-xs text-foreground-secondary">Likes</div>
-                  </div>
-                  <div className="text-center">
-                    <div className="text-sm font-bold text-foreground">{post.comments}</div>
-                    <div className="text-xs text-foreground-secondary">Comments</div>
-                  </div>
-                  <div className="text-center">
-                    <div className="text-sm font-bold text-foreground">{formatNumber(post.reach)}</div>
-                    <div className="text-xs text-foreground-secondary">Reach</div>
-                  </div>
-                </div>
-              )}
-
-              {/* Draft Actions */}
-              {post.status === 'draft' && (
-                <div className="flex gap-2">
-                  <button className="flex-1 px-4 py-2 bg-background-tertiary hover:bg-primary/20 text-foreground hover:text-primary rounded-lg text-sm font-medium transition-all duration-300 hover:scale-105">
-                    Edit
-                  </button>
-                  <button className="flex-1 px-4 py-2 bg-primary hover:bg-primary-hover text-primary-foreground rounded-lg text-sm font-medium transition-all duration-300 flex items-center justify-center gap-2 hover:scale-105">
-                    <Send className="w-4 h-4" />
-                    Post Now
-                  </button>
-                </div>
-              )}
-            </div>
-          </div>
-        ))}
       </div>
 
       {/* Empty State */}
-      {filteredPosts.length === 0 && filter !== 'draft' && (
+      {drafts.length === 0 && !isLoadingDrafts && (
         <div className="card p-12 text-center animate-scale-in">
           <div className="w-20 h-20 mx-auto bg-background-tertiary rounded-full flex items-center justify-center mb-4 animate-bounce-soft">
             <ImageIcon className="w-10 h-10 text-foreground-muted" />
           </div>
           <h3 className="text-xl font-bold text-foreground mb-2">No posts found</h3>
-          <p className="text-foreground-secondary mb-6">Create your first post to get started</p>
-          <button 
-            onClick={() => setShowCreateModal(true)}
-            className="btn-primary inline-flex items-center gap-2"
-          >
-            <Plus className="w-5 h-5" />
-            Create Post
-          </button>
-        </div>
-      )}
-
-      {drafts.length === 0 && filter === 'draft' && !isLoadingDrafts && (
-        <div className="card p-12 text-center animate-scale-in">
-          <div className="w-20 h-20 mx-auto bg-background-tertiary rounded-full flex items-center justify-center mb-4 animate-bounce-soft">
-            <FileText className="w-10 h-10 text-foreground-muted" />
-          </div>
-          <h3 className="text-xl font-bold text-foreground mb-2">No drafts yet</h3>
-          <p className="text-foreground-secondary mb-6">Generate videos with AI to create drafts</p>
-          <a href="/dashboard/ai-video" className="btn-primary inline-flex items-center gap-2">
-            <Sparkles className="w-5 h-5" />
-            Create AI Video
-          </a>
+          <p className="text-foreground-secondary mb-6">
+            {filter === 'draft' 
+              ? 'Generate videos with AI to create drafts'
+              : filter === 'scheduled'
+              ? 'Schedule a post to see it here'
+              : filter === 'published'
+              ? 'Published posts will appear here'
+              : 'Create your first post to get started'
+            }
+          </p>
+          {filter === 'draft' ? (
+            <a href="/dashboard/ai-video" className="btn-primary inline-flex items-center gap-2">
+              <Sparkles className="w-5 h-5" />
+              Create AI Video
+            </a>
+          ) : (
+            <button 
+              onClick={() => setShowCreateModal(true)}
+              className="btn-primary inline-flex items-center gap-2"
+            >
+              <Plus className="w-5 h-5" />
+              Create Post
+            </button>
+          )}
         </div>
       )}
 

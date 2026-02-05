@@ -30,6 +30,8 @@ export async function GET(request: NextRequest) {
         settings, 
         status,
         scheduled_date,
+        posted_at,
+        instagram_media_id,
         created_at,
         updated_at
       FROM drafts
@@ -73,6 +75,8 @@ export async function GET(request: NextRequest) {
         settings: row.settings,
         status: row.status,
         scheduledDate: row.scheduled_date,
+        postedAt: row.posted_at,
+        instagramMediaId: row.instagram_media_id,
         createdAt: row.created_at,
         updatedAt: row.updated_at
       })),
