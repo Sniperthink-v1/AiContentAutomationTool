@@ -1937,7 +1937,7 @@ export default function VideoEditorPage() {
                           width: `${Math.max(clipWidth, 30)}px`
                         }}
                       >
-                        <div className="w-full h-full bg-gradient-to-b from-blue-500/40 to-blue-500/20 border border-blue-500/60 rounded flex items-center gap-1 px-1 overflow-hidden">
+                        <div className="w-full h-full bg-gradient-to-b from-teal/40 to-teal/20 border border-teal/60 rounded flex items-center gap-1 px-1 overflow-hidden">
                           {clip.thumbnail && (
                             <img src={clip.thumbnail} alt="" className="h-full w-8 object-cover rounded flex-shrink-0" />
                           )}

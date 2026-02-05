@@ -56,8 +56,8 @@ function PromptModal({ isOpen, onClose, prompt, enhancedPrompt, type }: PromptMo
           <div className="flex items-center justify-between pb-4 border-b border-border">
             <h2 className="text-2xl font-bold text-foreground flex items-center gap-3">
               {type === 'photo' ? (
-                <div className="w-10 h-10 rounded-lg bg-blue-500/10 flex items-center justify-center">
-                  <ImageIcon className="w-6 h-6 text-blue-500" />
+                <div className="w-10 h-10 rounded-lg bg-teal/10 flex items-center justify-center">
+                  <ImageIcon className="w-6 h-6 text-teal" />
                 </div>
               ) : (
                 <div className="w-10 h-10 rounded-lg bg-purple-500/10 flex items-center justify-center">
@@ -142,9 +142,9 @@ function PromptModal({ isOpen, onClose, prompt, enhancedPrompt, type }: PromptMo
           </div>
 
           {/* Info Note */}
-          <div className="p-3 bg-blue-500/10 border border-blue-500/20 rounded-lg">
+          <div className="p-3 bg-teal/10 border border-teal/20 rounded-lg">
             <p className="text-xs text-foreground-secondary flex items-start gap-2">
-              <Sparkles className="w-4 h-4 text-blue-500 mt-0.5 flex-shrink-0" />
+              <Sparkles className="w-4 h-4 text-teal mt-0.5 flex-shrink-0" />
               <span>
                 These prompts were used to generate this {type === 'photo' ? 'image' : 'video'}. 
                 You can copy and reuse them to create similar content.
@@ -490,7 +490,7 @@ export default function MyMediaPage() {
                     {/* Type Badge */}
                     <div className="absolute top-2 left-2">
                       <div className={`px-2 py-1 rounded text-xs font-medium ${
-                        isVideo ? 'bg-red-500 text-white' : 'bg-blue-500 text-white'
+                        isVideo ? 'bg-red-500 text-white' : 'bg-teal text-white'
                       }`}>
                         {isVideo ? (
                           <><Video className="w-3 h-3 inline-block mr-1" />Video</>

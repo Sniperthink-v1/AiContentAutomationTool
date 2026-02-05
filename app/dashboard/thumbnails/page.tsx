@@ -241,7 +241,7 @@ export default function ThumbnailGeneratorPage() {
             onClick={() => setSelectedMode('text-to-thumbnail')}
             className="card p-8 text-left hover:border-primary transition-all group"
           >
-            <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-primary to-blue-600 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
+            <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-primary to-teal flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
               <FileText className="w-8 h-8 text-white" />
             </div>
             <h2 className="text-2xl font-bold text-foreground mb-2">Text to Thumbnail</h2>
@@ -265,7 +265,7 @@ export default function ThumbnailGeneratorPage() {
             onClick={() => setSelectedMode('image-to-thumbnail')}
             className="card p-8 text-left hover:border-primary transition-all group"
           >
-            <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-blue-600 to-primary flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
+            <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-teal to-primary flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
               <ImagePlus className="w-8 h-8 text-white" />
             </div>
             <h2 className="text-2xl font-bold text-foreground mb-2">Image to Thumbnail</h2>
@@ -306,8 +306,8 @@ export default function ThumbnailGeneratorPage() {
               <div className="flex items-center gap-4">
                 <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${
                   selectedMode === 'text-to-thumbnail' 
-                    ? 'bg-gradient-to-br from-primary to-blue-600' 
-                    : 'bg-gradient-to-br from-blue-600 to-primary'
+                    ? 'bg-gradient-to-br from-primary to-teal' 
+                    : 'bg-gradient-to-br from-teal to-primary'
                 }`}>
                   {selectedMode === 'text-to-thumbnail' 
                     ? <FileText className="w-6 h-6 text-white" />
@@ -534,7 +534,7 @@ export default function ThumbnailGeneratorPage() {
                       <span className={`px-3 py-1 rounded-lg text-white text-xs font-medium ${
                         thumbnail.mode === 'text-to-thumbnail' 
                           ? 'bg-primary/80' 
-                          : 'bg-blue-600/80'
+                          : 'bg-teal/80'
                       }`}>
                         {thumbnail.mode === 'text-to-thumbnail' ? 'Text' : 'Image'}
                       </span>

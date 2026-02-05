@@ -1835,8 +1835,8 @@ export default function AIVideoPage() {
                 {enableVoiceCloning && (
                   <div className="space-y-4 animate-fade-in">
                     {/* How It Works */}
-                    <div className="p-3 bg-blue-500/10 border border-blue-500/20 rounded-lg">
-                      <div className="text-xs font-medium text-blue-400 mb-1">🎯 How Voice Generation Works</div>
+                    <div className="p-3 bg-teal/10 border border-teal/20 rounded-lg">
+                      <div className="text-xs font-medium text-teal mb-1">🎯 How Voice Generation Works</div>
                       <div className="text-xs text-foreground-secondary">
                         1. Choose a voice preset from 50+ AI voices<br/>
                         2. Type text OR upload audio to convert<br/>
@@ -2625,8 +2625,8 @@ export default function AIVideoPage() {
               
               {/* Example prompt helper - collapsible */}
               {selectedModel === 'veo3.1_fast' && veoVideoStyle === 'dialogue' && (
-                <details className="mb-3 p-3 bg-blue-500/5 border border-blue-500/20 rounded-lg">
-                  <summary className="text-xs font-medium text-blue-400 cursor-pointer flex items-center gap-2">
+                <details className="mb-3 p-3 bg-teal/5 border border-teal/20 rounded-lg">
+                  <summary className="text-xs font-medium text-teal cursor-pointer flex items-center gap-2">
                     <Info className="w-3.5 h-3.5" />
                     See example with dialogue and descriptions
                   </summary>
@@ -2650,12 +2650,12 @@ export default function AIVideoPage() {
               {/* Custom Enhancement Options */}
               {showEnhanceOptions && (
                 <div className="space-y-3 p-4 bg-background-tertiary rounded-lg border border-border animate-slide-down">
-                  <div className="mb-3 p-3 bg-blue-500/10 border border-blue-500/20 rounded-lg">
+                  <div className="mb-3 p-3 bg-teal/10 border border-teal/20 rounded-lg">
                     <div className="flex items-start gap-2">
-                      <Info className="w-4 h-4 text-blue-400 mt-0.5 flex-shrink-0" />
-                      <div className="text-xs text-blue-300 space-y-1">
+                      <Info className="w-4 h-4 text-teal mt-0.5 flex-shrink-0" />
+                      <div className="text-xs text-teal space-y-1">
                         <p className="font-medium">💡 Enhanced prompts create cohesive storylines</p>
-                        <p className="text-blue-300/80">
+                        <p className="text-teal/80">
                           When you enhance your prompt, AI will break it into {getClipCountForEnhancement()} connected clips that flow together as ONE continuous story. Each clip will naturally transition to the next, maintaining consistent characters, settings, and visual style throughout.
                         </p>
                       </div>
@@ -3305,10 +3305,10 @@ export default function AIVideoPage() {
             {clipGenerationPhase === 'preview' && generatedClips.length > 1 && (
               <div className="mt-4 space-y-3 animate-slide-up">
                 {/* Compact Header */}
-                <div className="p-3 bg-blue-500/10 border border-blue-500/30 rounded-lg">
+                <div className="p-3 bg-teal/10 border border-teal/30 rounded-lg">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
-                      <Film className="w-4 h-4 text-blue-500" />
+                      <Film className="w-4 h-4 text-teal" />
                       <h3 className="text-sm font-bold text-foreground">
                         Review Clips ({generatedClips.filter(c => c.status === 'complete').length}/{generatedClips.length})
                       </h3>
@@ -3525,7 +3525,7 @@ export default function AIVideoPage() {
           
           {/* Audio Features Card */}
           <div className="card p-6 bg-orange-500/5 border-orange-500/20">
-            <Music className="w-8 h-8 text-blue-500 mb-3" />
+            <Music className="w-8 h-8 text-teal mb-3" />
             <h3 className="text-lg font-bold text-foreground mb-3">Audio Features</h3>
             
             <div className="space-y-4 text-sm">
@@ -3642,24 +3642,24 @@ export default function AIVideoPage() {
 
           {/* Multi-Clip Workflow Info Card */}
           {selectedModel === 'veo3.1_fast' && scriptSections.length > 1 && (
-            <div className="card p-6 bg-blue-500/5 border-blue-500/20 animate-fade-in">
-              <Film className="w-8 h-8 text-blue-500 mb-3" />
+            <div className="card p-6 bg-teal/5 border-teal/20 animate-fade-in">
+              <Film className="w-8 h-8 text-teal mb-3" />
               <h3 className="text-lg font-bold text-foreground mb-2">Multi-Clip Workflow</h3>
               <ul className="space-y-2 text-sm text-foreground-secondary">
                 <li className="flex gap-2 items-start">
-                  <span className="text-blue-500 mt-1">1.</span>
+                  <span className="text-teal mt-1">1.</span>
                   <span>Generate {scriptSections.length} clips (~{Math.ceil(parseInt(selectedDuration) / scriptSections.length)}s each)</span>
                 </li>
                 <li className="flex gap-2 items-start">
-                  <span className="text-blue-500 mt-1">2.</span>
+                  <span className="text-teal mt-1">2.</span>
                   <span>Preview each clip individually</span>
                 </li>
                 <li className="flex gap-2 items-start">
-                  <span className="text-blue-500 mt-1">3.</span>
+                  <span className="text-teal mt-1">3.</span>
                   <span>Edit any clip you&apos;re not happy with</span>
                 </li>
                 <li className="flex gap-2 items-start">
-                  <span className="text-blue-500 mt-1">4.</span>
+                  <span className="text-teal mt-1">4.</span>
                   <span>Combine into final video</span>
                 </li>
               </ul>

@@ -526,7 +526,7 @@ export default function AIPhotosPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold text-foreground flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center">
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-teal to-teal-dark flex items-center justify-center">
               <ImageIcon className="w-6 h-6 text-white" />
             </div>
             AI Photo Generation
@@ -823,7 +823,7 @@ export default function AIPhotosPage() {
             <button
               onClick={handleGenerateImage}
               disabled={isGenerating || (!prompt.trim() && !enhancedPrompt) || credits < requiredCredits}
-              className="w-full py-4 bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white rounded-xl font-semibold transition-all duration-300 flex items-center justify-center gap-3 disabled:opacity-50 disabled:cursor-not-allowed hover:scale-105 disabled:hover:scale-100 shadow-lg hover:shadow-xl"
+              className="w-full py-4 bg-gradient-to-r from-teal to-teal-dark hover:from-teal-dark hover:to-teal text-white rounded-xl font-semibold transition-all duration-300 flex items-center justify-center gap-3 disabled:opacity-50 disabled:cursor-not-allowed hover:scale-105 disabled:hover:scale-100 shadow-lg hover:shadow-xl"
             >
               {isGenerating ? (
                 <>
@@ -923,7 +923,7 @@ export default function AIPhotosPage() {
                 <button
                   onClick={saveToMyMedia}
                   disabled={isSaving}
-                  className="py-3 bg-blue-500 hover:bg-blue-600 text-white rounded-lg font-medium transition-all duration-200 flex items-center justify-center gap-2 disabled:opacity-50"
+                  className="py-3 bg-teal hover:bg-teal-dark text-white rounded-lg font-medium transition-all duration-200 flex items-center justify-center gap-2 disabled:opacity-50"
                 >
                   <BookmarkPlus className="w-5 h-5" />
                   {isSaving ? 'Saving...' : 'Save to My Media'}
@@ -965,7 +965,7 @@ export default function AIPhotosPage() {
           )}
 
           {/* Tips */}
-          <div className="bg-gradient-to-br from-blue-500/10 to-blue-600/10 rounded-xl p-6 border border-blue-500/20">
+          <div className="bg-gradient-to-br from-teal/10 to-teal-dark/10 rounded-xl p-6 border border-teal/20">
             <h3 className="text-lg font-semibold text-foreground mb-3 flex items-center gap-2">
               <Sparkles className="w-5 h-5 text-primary" />
               Pro Tips
@@ -1080,7 +1080,7 @@ export default function AIPhotosPage() {
               <button
                 onClick={() => handleSaveImage('schedule')}
                 disabled={isSaving}
-                className="w-full py-3 bg-blue-500 hover:bg-blue-600 text-white rounded-lg font-medium transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+                className="w-full py-3 bg-teal hover:bg-teal-dark text-white rounded-lg font-medium transition-all flex items-center justify-center gap-2 disabled:opacity-50"
               >
                 <Calendar className="w-5 h-5" />
                 Schedule {saveType === 'story' ? 'Story' : 'Post'}

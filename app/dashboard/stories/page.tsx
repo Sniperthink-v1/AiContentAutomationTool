@@ -395,7 +395,7 @@ export default function StoriesPage() {
 
                   {/* Status Badge */}
                   <div className={`absolute top-2 right-2 px-2 py-1 rounded-lg text-xs font-medium ${
-                    story.status === 'scheduled' ? 'bg-blue-500/90 text-white' :
+                    story.status === 'scheduled' ? 'bg-teal/90 text-white' :
                     story.status === 'posted' ? 'bg-green-500/90 text-white' :
                     'bg-yellow-500/90 text-white'
                   }`}>
@@ -412,7 +412,7 @@ export default function StoriesPage() {
                     </button>
                     <button
                       onClick={() => handleEditStory(story)}
-                      className="p-2 bg-blue-500/90 hover:bg-blue-500 rounded-full transition-colors"
+                      className="p-2 bg-teal/90 hover:bg-teal rounded-full transition-colors"
                     >
                       <Edit className="w-4 h-4 text-white" />
                     </button>

@@ -538,7 +538,7 @@ export default function PostsPage() {
                   draft.status === 'published' 
                     ? 'bg-green-500/20 text-green-500 border-green-500/30'
                     : draft.status === 'scheduled'
-                    ? 'bg-blue-500/20 text-blue-500 border-blue-500/30'
+                    ? 'bg-teal/20 text-teal border-teal/30'
                     : 'bg-yellow-500/20 text-yellow-500 border-yellow-500/30'
                 }`}>
                   {draft.status.charAt(0).toUpperCase() + draft.status.slice(1)}
@@ -572,7 +572,7 @@ export default function PostsPage() {
 
               {/* Show scheduled time if scheduled */}
               {draft.status === 'scheduled' && draft.scheduledDate && (
-                <div className="flex items-center gap-1 text-xs text-blue-500">
+                <div className="flex items-center gap-1 text-xs text-teal">
                   <Clock className="w-3 h-3" />
                   {new Date(draft.scheduledDate).toLocaleString('en-US', {
                     month: 'short',
@@ -820,7 +820,7 @@ export default function PostsPage() {
                   {mentions.map((mention, index) => (
                     <span
                       key={index}
-                      className="px-3 py-1 bg-blue-500/10 text-blue-500 rounded-full text-sm flex items-center gap-2 group hover:bg-blue-500/20 transition-all"
+                      className="px-3 py-1 bg-teal/10 text-teal rounded-full text-sm flex items-center gap-2 group hover:bg-teal/20 transition-all"
                     >
                       @{mention}
                       <button
@@ -833,7 +833,7 @@ export default function PostsPage() {
                   ))}
                   <button
                     onClick={addMention}
-                    className="px-3 py-1 border-2 border-dashed border-border hover:border-blue-500 text-foreground-secondary hover:text-blue-500 rounded-full text-sm transition-all duration-300"
+                    className="px-3 py-1 border-2 border-dashed border-border hover:border-teal text-foreground-secondary hover:text-teal rounded-full text-sm transition-all duration-300"
                   >
                     + Add Mention
                   </button>
@@ -932,9 +932,9 @@ export default function PostsPage() {
 
               {/* Schedule Date/Time (shown when editing scheduled post or manually toggled) */}
               {(scheduleDate || scheduleTime) && (
-                <div className="space-y-2 p-4 bg-blue-500/10 border border-blue-500/30 rounded-lg">
+                <div className="space-y-2 p-4 bg-teal/10 border border-teal/30 rounded-lg">
                   <label className="text-sm font-medium text-foreground flex items-center gap-2">
-                    <Calendar className="w-4 h-4 text-blue-500" />
+                    <Calendar className="w-4 h-4 text-teal" />
                     Scheduled Time
                   </label>
                   <div className="grid grid-cols-2 gap-3">
