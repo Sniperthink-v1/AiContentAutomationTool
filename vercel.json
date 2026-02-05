@@ -2,11 +2,11 @@
   "crons": [
     {
       "path": "/api/cron/publish-stories",
-      "schedule": "* * * * *"
+      "schedule": "0 0 * * *"
     },
     {
       "path": "/api/cron/publish-posts",
-      "schedule": "* * * * *"
+      "schedule": "0 0 * * *"
     }
   ]
 }
