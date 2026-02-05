@@ -16,26 +16,26 @@ const iconMap: Record<NotificationType, React.ReactNode> = {
 }
 
 const colorMap: Record<NotificationType, string> = {
-  video: 'text-blue-500',
-  photo: 'text-purple-500',
-  music: 'text-pink-500',
-  credits: 'text-yellow-500',
-  feature: 'text-cyan-500',
-  info: 'text-blue-500',
-  success: 'text-green-500',
-  warning: 'text-orange-500',
+  video: 'text-teal',
+  photo: 'text-plum',
+  music: 'text-golden',
+  credits: 'text-golden',
+  feature: 'text-orange',
+  info: 'text-teal',
+  success: 'text-sage',
+  warning: 'text-golden',
   error: 'text-red-500'
 }
 
 const bgColorMap: Record<NotificationType, string> = {
-  video: 'bg-blue-500/10 border-blue-500/20',
-  photo: 'bg-purple-500/10 border-purple-500/20',
-  music: 'bg-pink-500/10 border-pink-500/20',
-  credits: 'bg-yellow-500/10 border-yellow-500/20',
-  feature: 'bg-cyan-500/10 border-cyan-500/20',
-  info: 'bg-blue-500/10 border-blue-500/20',
-  success: 'bg-green-500/10 border-green-500/20',
-  warning: 'bg-orange-500/10 border-orange-500/20',
+  video: 'bg-teal/10 border-teal/20',
+  photo: 'bg-plum/10 border-plum/20',
+  music: 'bg-golden/10 border-golden/20',
+  credits: 'bg-golden/10 border-golden/20',
+  feature: 'bg-orange/10 border-orange/20',
+  info: 'bg-teal/10 border-teal/20',
+  success: 'bg-sage/10 border-sage/20',
+  warning: 'bg-golden/10 border-golden/20',
   error: 'bg-red-500/10 border-red-500/20'
 }
 
@@ -55,7 +55,7 @@ export function ToastContainer() {
             ${bgColorMap[toast.type]}
           `}
           style={{
-            background: 'rgba(10, 10, 15, 0.95)',
+            background: 'rgba(255, 255, 255, 0.95)',
             animation: 'slideInRight 0.3s ease-out'
           }}
         >

@@ -10,24 +10,49 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        // Pitch Black Dark Theme - Simplified Color Palette
+        // Brand Color Theme
         background: {
-          DEFAULT: '#000000',
-          secondary: '#0a0a0a',
-          tertiary: '#111111',
+          DEFAULT: '#FFFFFF',
+          secondary: '#F8F9FA',
+          tertiary: '#F1F3F5',
         },
         foreground: {
-          DEFAULT: '#ffffff',
-          secondary: '#a3a3a3',
-          muted: '#737373',
+          DEFAULT: '#341539', // Deep Plum
+          secondary: '#5A5A5A',
+          muted: '#8A8A8A',
         },
         primary: {
-          DEFAULT: '#3b82f6', // Blue - Main accent
+          DEFAULT: '#1A6262', // Teal - Primary
           foreground: '#ffffff',
-          hover: '#2563eb',
+          hover: '#155252',
         },
-        border: '#1f1f1f',
-        input: '#171717',
+        secondary: {
+          DEFAULT: '#E1A940', // Golden Yellow
+          foreground: '#341539',
+          hover: '#C99530',
+        },
+        tertiary: {
+          DEFAULT: '#341539', // Deep Plum
+          foreground: '#ffffff',
+          hover: '#2A1030',
+        },
+        accent: {
+          DEFAULT: '#91C499', // Sage Green
+          foreground: '#341539',
+          hover: '#7FB388',
+        },
+        highlight: {
+          DEFAULT: '#FF6700', // Vibrant Orange (CTA)
+          foreground: '#ffffff',
+          hover: '#E55A00',
+        },
+        teal: '#1A6262',
+        golden: '#E1A940',
+        plum: '#341539',
+        sage: '#91C499',
+        orange: '#FF6700',
+        border: '#E5E7EB',
+        input: '#F1F3F5',
       },
       backgroundImage: {
         'gradient-radial': 'radial-gradient(var(--tw-gradient-stops))',

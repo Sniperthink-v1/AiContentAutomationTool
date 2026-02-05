@@ -66,43 +66,43 @@ export function Toast({ message, type, onClose, duration = 5000, index = 0 }: To
     info: 'Notification'
   }
 
-  // Blue and black theme colors - matching your app theme
+  // Brand theme colors
   const colors = {
     success: {
-      bg: 'bg-gradient-to-r from-[#0a1628] via-[#0d1f35] to-[#0a2818]',
-      border: 'border-emerald-500/50',
-      icon: 'bg-emerald-500/20 text-emerald-400 ring-1 ring-emerald-500/30',
-      title: 'text-emerald-400',
-      progressBg: 'bg-emerald-500/20',
-      progressBar: 'bg-gradient-to-r from-emerald-500 to-emerald-400',
-      glow: 'shadow-emerald-500/20'
+      bg: 'bg-gradient-to-r from-[#F8F9FA] via-[#F1F3F5] to-[#E8F5E9]',
+      border: 'border-sage/50',
+      icon: 'bg-sage/20 text-teal ring-1 ring-sage/30',
+      title: 'text-teal',
+      progressBg: 'bg-sage/20',
+      progressBar: 'bg-gradient-to-r from-sage to-teal',
+      glow: 'shadow-sage/20'
     },
     error: {
-      bg: 'bg-gradient-to-r from-[#0a1628] via-[#0d1f35] to-[#280a0a]',
+      bg: 'bg-gradient-to-r from-[#F8F9FA] via-[#F1F3F5] to-[#FFEBEE]',
       border: 'border-red-500/50',
-      icon: 'bg-red-500/20 text-red-400 ring-1 ring-red-500/30',
-      title: 'text-red-400',
+      icon: 'bg-red-500/20 text-red-500 ring-1 ring-red-500/30',
+      title: 'text-red-500',
       progressBg: 'bg-red-500/20',
       progressBar: 'bg-gradient-to-r from-red-500 to-red-400',
       glow: 'shadow-red-500/20'
     },
     warning: {
-      bg: 'bg-gradient-to-r from-[#0a1628] via-[#0d1f35] to-[#28200a]',
-      border: 'border-amber-500/50',
-      icon: 'bg-amber-500/20 text-amber-400 ring-1 ring-amber-500/30',
-      title: 'text-amber-400',
-      progressBg: 'bg-amber-500/20',
-      progressBar: 'bg-gradient-to-r from-amber-500 to-amber-400',
-      glow: 'shadow-amber-500/20'
+      bg: 'bg-gradient-to-r from-[#F8F9FA] via-[#F1F3F5] to-[#FFF8E1]',
+      border: 'border-golden/50',
+      icon: 'bg-golden/20 text-golden ring-1 ring-golden/30',
+      title: 'text-golden',
+      progressBg: 'bg-golden/20',
+      progressBar: 'bg-gradient-to-r from-golden to-orange',
+      glow: 'shadow-golden/20'
     },
     info: {
-      bg: 'bg-gradient-to-r from-[#0a1628] via-[#0d1f35] to-[#0a1c28]',
-      border: 'border-blue-500/50',
-      icon: 'bg-blue-500/20 text-blue-400 ring-1 ring-blue-500/30',
-      title: 'text-blue-400',
-      progressBg: 'bg-blue-500/20',
-      progressBar: 'bg-gradient-to-r from-blue-500 to-blue-400',
-      glow: 'shadow-blue-500/20'
+      bg: 'bg-gradient-to-r from-[#F8F9FA] via-[#F1F3F5] to-[#E8F4F4]',
+      border: 'border-teal/50',
+      icon: 'bg-teal/20 text-teal ring-1 ring-teal/30',
+      title: 'text-teal',
+      progressBg: 'bg-teal/20',
+      progressBar: 'bg-gradient-to-r from-teal to-primary-hover',
+      glow: 'shadow-teal/20'
     }
   }
 
@@ -119,7 +119,7 @@ export function Toast({ message, type, onClose, duration = 5000, index = 0 }: To
       >
         {/* Animated background glow */}
         <div className="absolute inset-0 opacity-30">
-          <div className={`absolute top-0 right-0 w-32 h-32 ${type === 'success' ? 'bg-emerald-500' : type === 'error' ? 'bg-red-500' : type === 'warning' ? 'bg-amber-500' : 'bg-blue-500'} rounded-full blur-3xl`} />
+          <div className={`absolute top-0 right-0 w-32 h-32 ${type === 'success' ? 'bg-sage' : type === 'error' ? 'bg-red-500' : type === 'warning' ? 'bg-golden' : 'bg-teal'} rounded-full blur-3xl`} />
         </div>
 
         {/* Icon container */}
@@ -132,7 +132,7 @@ export function Toast({ message, type, onClose, duration = 5000, index = 0 }: To
           <p className={`text-xs font-semibold uppercase tracking-wider mb-1 ${colorScheme.title}`}>
             {titles[type]}
           </p>
-          <p className="text-sm font-medium text-white/90 leading-relaxed">
+          <p className="text-sm font-medium text-plum leading-relaxed">
             {message}
           </p>
         </div>
@@ -140,7 +140,7 @@ export function Toast({ message, type, onClose, duration = 5000, index = 0 }: To
         {/* Close button */}
         <button
           onClick={handleClose}
-          className="relative flex-shrink-0 w-8 h-8 rounded-lg flex items-center justify-center text-gray-500 hover:text-white hover:bg-white/10 transition-all duration-200 hover:scale-110 active:scale-95"
+          className="relative flex-shrink-0 w-8 h-8 rounded-lg flex items-center justify-center text-foreground-muted hover:text-plum hover:bg-plum/10 transition-all duration-200 hover:scale-110 active:scale-95"
         >
           <X className="w-4 h-4" />
         </button>

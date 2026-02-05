@@ -299,22 +299,22 @@ function DashboardLayoutInner({
 
                 {/* Notification Dropdown */}
                 {showNotifications && (
-                  <div className="absolute right-0 top-full mt-2 w-80 rounded-xl overflow-hidden z-50 animate-fade-in shadow-[0_0_30px_rgba(59,130,246,0.1)]"
+                  <div className="absolute right-0 top-full mt-2 w-80 rounded-xl overflow-hidden z-50 animate-fade-in shadow-2xl"
                        style={{ 
-                         background: '#0a0a0f',
-                         border: '1px solid rgba(59, 130, 246, 0.15)'
+                         background: '#FFFFFF',
+                         border: '1px solid #E5E7EB'
                        }}>
                     {/* Header */}
-                    <div className="px-4 py-3 border-b border-blue-500/15">
+                    <div className="px-4 py-3 border-b border-border">
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-2">
-                          <div className="w-7 h-7 rounded-lg bg-[#12121a] flex items-center justify-center">
-                            <Bell className="w-4 h-4 text-blue-500" />
+                          <div className="w-7 h-7 rounded-lg bg-teal/10 flex items-center justify-center">
+                            <Bell className="w-4 h-4 text-teal" />
                           </div>
-                          <h3 className="text-sm font-bold text-white">Notifications</h3>
+                          <h3 className="text-sm font-bold text-plum">Notifications</h3>
                         </div>
                         {unreadCount > 0 && (
-                          <span className="text-xs font-medium text-blue-400 bg-blue-500/15 px-2 py-0.5 rounded-full">
+                          <span className="text-xs font-medium text-teal bg-teal/10 px-2 py-0.5 rounded-full">
                             {unreadCount} new
                           </span>
                         )}
@@ -325,52 +325,52 @@ function DashboardLayoutInner({
                     <div className="max-h-[320px] overflow-y-auto">
                       {isLoadingNotifications ? (
                         <div className="px-4 py-8 text-center">
-                          <div className="w-6 h-6 border-2 border-blue-500/30 border-t-blue-500 rounded-full animate-spin mx-auto"></div>
-                          <p className="text-gray-500 text-xs mt-2">Loading...</p>
+                          <div className="w-6 h-6 border-2 border-teal/30 border-t-teal rounded-full animate-spin mx-auto"></div>
+                          <p className="text-foreground-muted text-xs mt-2">Loading...</p>
                         </div>
                       ) : notifications.length === 0 ? (
                         <div className="px-4 py-8 text-center">
-                          <div className="w-12 h-12 rounded-xl bg-[#12121a] flex items-center justify-center mx-auto mb-2">
-                            <Bell className="w-6 h-6 text-blue-500/50" />
+                          <div className="w-12 h-12 rounded-xl bg-background-tertiary flex items-center justify-center mx-auto mb-2">
+                            <Bell className="w-6 h-6 text-teal/50" />
                           </div>
-                          <p className="text-gray-500 text-xs">No notifications yet</p>
+                          <p className="text-foreground-muted text-xs">No notifications yet</p>
                         </div>
                       ) : (
                         notifications.map((notification, index) => (
                           <div
                             key={notification.id}
                             onClick={() => !notification.read && markAsRead(notification.id)}
-                            className={`px-4 py-3 border-b border-blue-500/10 hover:bg-blue-500/5 transition-all duration-200 cursor-pointer group ${!notification.read ? 'bg-blue-500/5' : ''}`}
+                            className={`px-4 py-3 border-b border-border hover:bg-teal/5 transition-all duration-200 cursor-pointer group ${!notification.read ? 'bg-teal/5' : ''}`}
                             style={{ animationDelay: `${index * 50}ms` }}
                           >
                             <div className="flex items-start gap-3">
-                              {/* Icon Container - Blue icon on black div */}
-                              <div className={`w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 transition-transform group-hover:scale-105 bg-[#12121a]`}>
-                                {notification.type === 'video' && <Video className="w-4 h-4 text-blue-500" />}
-                                {notification.type === 'photo' && <ImagePlus className="w-4 h-4 text-blue-500" />}
-                                {notification.type === 'music' && <Music className="w-4 h-4 text-blue-500" />}
-                                {notification.type === 'credits' && <Coins className="w-4 h-4 text-blue-500" />}
-                                {notification.type === 'feature' && <Sparkles className="w-4 h-4 text-blue-500" />}
-                                {notification.type === 'info' && <Bell className="w-4 h-4 text-blue-500" />}
-                                {notification.type === 'success' && <Check className="w-4 h-4 text-blue-500" />}
-                                {notification.type === 'warning' && <Coins className="w-4 h-4 text-blue-500" />}
-                                {notification.type === 'error' && <X className="w-4 h-4 text-blue-500" />}
+                              {/* Icon Container - Teal icon on light bg */}
+                              <div className={`w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 transition-transform group-hover:scale-105 bg-background-tertiary`}>
+                                {notification.type === 'video' && <Video className="w-4 h-4 text-teal" />}
+                                {notification.type === 'photo' && <ImagePlus className="w-4 h-4 text-teal" />}
+                                {notification.type === 'music' && <Music className="w-4 h-4 text-teal" />}
+                                {notification.type === 'credits' && <Coins className="w-4 h-4 text-golden" />}
+                                {notification.type === 'feature' && <Sparkles className="w-4 h-4 text-orange" />}
+                                {notification.type === 'info' && <Bell className="w-4 h-4 text-teal" />}
+                                {notification.type === 'success' && <Check className="w-4 h-4 text-sage" />}
+                                {notification.type === 'warning' && <Coins className="w-4 h-4 text-golden" />}
+                                {notification.type === 'error' && <X className="w-4 h-4 text-red-500" />}
                               </div>
                               
                               {/* Content */}
                               <div className="flex-1 min-w-0">
                                 <div className="flex items-center gap-1.5">
-                                  <p className={`text-xs font-semibold ${!notification.read ? 'text-white' : 'text-gray-400'}`}>
+                                  <p className={`text-xs font-semibold ${!notification.read ? 'text-plum' : 'text-foreground-secondary'}`}>
                                     {notification.title}
                                   </p>
                                   {!notification.read && (
-                                    <span className="w-1.5 h-1.5 rounded-full bg-blue-500"></span>
+                                    <span className="w-1.5 h-1.5 rounded-full bg-teal"></span>
                                   )}
                                 </div>
-                                <p className="text-xs text-gray-500 mt-0.5 line-clamp-1">
+                                <p className="text-xs text-foreground-muted mt-0.5 line-clamp-1">
                                   {notification.message}
                                 </p>
-                                <p className="text-xs text-blue-500/60 mt-1">
+                                <p className="text-xs text-teal/60 mt-1">
                                   {notification.time}
                                 </p>
                               </div>
@@ -381,16 +381,16 @@ function DashboardLayoutInner({
                     </div>
 
                     {/* Footer */}
-                    <div className="px-4 py-2 border-t border-blue-500/15 bg-[#08080c]">
+                    <div className="px-4 py-2 border-t border-border bg-background-secondary">
                       {notifications.length > 0 && unreadCount > 0 ? (
                         <button 
                           onClick={markAllAsRead}
-                          className="w-full text-center text-xs text-blue-400 hover:text-blue-300 font-medium py-1.5 rounded-lg hover:bg-blue-500/10 transition-all duration-200 flex items-center justify-center gap-1.5"
+                          className="w-full text-center text-xs text-teal hover:text-primary-hover font-medium py-1.5 rounded-lg hover:bg-teal/10 transition-all duration-200 flex items-center justify-center gap-1.5"
                         >
                           <Check className="w-3 h-3" /> Mark all as read
                         </button>
                       ) : notifications.length > 0 ? (
-                        <p className="text-center text-xs text-gray-500 py-1.5">
+                        <p className="text-center text-xs text-foreground-muted py-1.5">
                           All caught up! ✓
                         </p>
                       ) : null}

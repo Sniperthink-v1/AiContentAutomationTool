@@ -260,23 +260,23 @@ export default function DashboardPage() {
           </div>
           <ResponsiveContainer width="100%" height={300}>
             <LineChart data={followerData}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#1f1f1f" />
-              <XAxis dataKey="date" stroke="#737373" />
-              <YAxis stroke="#737373" />
+              <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
+              <XAxis dataKey="date" stroke="#5A5A5A" />
+              <YAxis stroke="#5A5A5A" />
               <Tooltip
                 contentStyle={{
-                  backgroundColor: '#0a0a0a',
-                  border: '1px solid #1f1f1f',
+                  backgroundColor: '#FFFFFF',
+                  border: '1px solid #E5E7EB',
                   borderRadius: '8px',
-                  color: '#ffffff'
+                  color: '#341539'
                 }}
               />
               <Line
                 type="monotone"
                 dataKey="followers"
-                stroke="#3b82f6"
+                stroke="#1A6262"
                 strokeWidth={3}
-                dot={{ fill: '#3b82f6', r: 4 }}
+                dot={{ fill: '#1A6262', r: 4 }}
                 activeDot={{ r: 6 }}
               />
             </LineChart>
@@ -294,21 +294,21 @@ export default function DashboardPage() {
           </div>
           <ResponsiveContainer width="100%" height={300}>
             <BarChart data={engagementData}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#1f1f1f" />
-              <XAxis dataKey="date" stroke="#737373" />
-              <YAxis stroke="#737373" />
+              <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
+              <XAxis dataKey="date" stroke="#5A5A5A" />
+              <YAxis stroke="#5A5A5A" />
               <Tooltip
                 contentStyle={{
-                  backgroundColor: '#0a0a0a',
-                  border: '1px solid #1f1f1f',
+                  backgroundColor: '#FFFFFF',
+                  border: '1px solid #E5E7EB',
                   borderRadius: '8px',
-                  color: '#ffffff'
+                  color: '#341539'
                 }}
               />
               <Legend />
-              <Bar dataKey="likes" fill="#3b82f6" radius={[8, 8, 0, 0]} />
-              <Bar dataKey="comments" fill="#60a5fa" radius={[8, 8, 0, 0]} />
-              <Bar dataKey="shares" fill="#93c5fd" radius={[8, 8, 0, 0]} />
+              <Bar dataKey="likes" fill="#1A6262" radius={[8, 8, 0, 0]} />
+              <Bar dataKey="comments" fill="#E1A940" radius={[8, 8, 0, 0]} />
+              <Bar dataKey="shares" fill="#91C499" radius={[8, 8, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
         </div>

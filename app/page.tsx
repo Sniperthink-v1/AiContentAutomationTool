@@ -24,10 +24,10 @@ export default function Home() {
   }, [router])
 
   return (
-    <div className="min-h-screen bg-black flex items-center justify-center">
+    <div className="min-h-screen bg-white flex items-center justify-center">
       <div className="text-center">
-        <Loader2 className="w-12 h-12 text-blue-500 animate-spin mx-auto mb-4" />
-        <p className="text-gray-400">Loading...</p>
+        <Loader2 className="w-12 h-12 text-teal animate-spin mx-auto mb-4" />
+        <p className="text-foreground-secondary">Loading...</p>
       </div>
     </div>
   )

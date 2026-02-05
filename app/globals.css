@@ -4,8 +4,8 @@
 
 @layer base {
   :root {
-    --background: 0 0% 0%;
-    --foreground: 0 0% 100%;
+    --background: 0 0% 100%;
+    --foreground: 330 48% 15%;
   }
 
   * {
@@ -99,7 +99,7 @@
     background: linear-gradient(
       90deg,
       transparent,
-      rgba(59, 130, 246, 0.1),
+      rgba(26, 98, 98, 0.1),
       transparent
     );
     animation: shimmer 2s infinite;
@@ -111,16 +111,16 @@
   }
 
   .custom-scrollbar::-webkit-scrollbar-track {
-    background: #111111;
+    background: #F1F3F5;
     border-radius: 4px;
   }
 
   .custom-scrollbar::-webkit-scrollbar-thumb {
-    background: #3b82f6;
+    background: #1A6262;
     border-radius: 4px;
   }
 
   .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-    background: #2563eb;
+    background: #155252;
   }
 }
