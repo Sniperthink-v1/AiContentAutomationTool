@@ -1,16 +1,59 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import { getComments, replyToComment, deleteComment } from '@/lib/instagram';
+import { getAuthUser } from '@/lib/middleware';
+import pool from '@/lib/db';
+
+// Helper function to get Instagram credentials
+async function getInstagramCredentials(userId: string) {
+  const cookieStore = await cookies();
+  let accessToken = cookieStore.get('ig_access_token')?.value;
+
+  // If not in cookies, try database
+  if (!accessToken) {
+    const result = await pool.query(
+      `SELECT access_token, token_expires_at, is_active
+       FROM social_integrations
+       WHERE user_id = $1 AND platform = 'instagram'
+       ORDER BY updated_at DESC
+       LIMIT 1`,
+      [userId]
+    );
+
+    if (result.rows.length === 0 || !result.rows[0].is_active) {
+      return null;
+    }
+
+    const integration = result.rows[0];
+    
+    // Check if token is expired
+    if (integration.token_expires_at && new Date(integration.token_expires_at) < new Date()) {
+      return null;
+    }
+
+    accessToken = integration.access_token;
+  }
+
+  return accessToken;
+}
 
 // GET - Fetch comments for a media
 export async function GET(request: NextRequest) {
   try {
-    const cookieStore = await cookies();
-    const accessToken = cookieStore.get('ig_access_token')?.value;
+    const user = await getAuthUser(request);
+    
+    if (!user) {
+      return NextResponse.json(
+        { error: 'Unauthorized' },
+        { status: 401 }
+      );
+    }
+
+    const accessToken = await getInstagramCredentials(user.id);
 
     if (!accessToken) {
       return NextResponse.json(
-        { error: 'Instagram account not connected' },
+        { error: 'Instagram account not connected. Please connect in Settings.' },
         { status: 401 }
       );
     }
@@ -44,12 +87,20 @@ export async function GET(request: NextRequest) {
 // POST - Reply to a comment
 export async function POST(request: NextRequest) {
   try {
-    const cookieStore = await cookies();
-    const accessToken = cookieStore.get('ig_access_token')?.value;
+    const user = await getAuthUser(request);
+    
+    if (!user) {
+      return NextResponse.json(
+        { error: 'Unauthorized' },
+        { status: 401 }
+      );
+    }
+
+    const accessToken = await getInstagramCredentials(user.id);
 
     if (!accessToken) {
       return NextResponse.json(
-        { error: 'Instagram account not connected' },
+        { error: 'Instagram account not connected. Please connect in Settings.' },
         { status: 401 }
       );
     }
@@ -84,12 +135,20 @@ export async function POST(request: NextRequest) {
 // DELETE - Delete a comment
 export async function DELETE(request: NextRequest) {
   try {
-    const cookieStore = await cookies();
-    const accessToken = cookieStore.get('ig_access_token')?.value;
+    const user = await getAuthUser(request);
+    
+    if (!user) {
+      return NextResponse.json(
+        { error: 'Unauthorized' },
+        { status: 401 }
+      );
+    }
+
+    const accessToken = await getInstagramCredentials(user.id);
 
     if (!accessToken) {
       return NextResponse.json(
-        { error: 'Instagram account not connected' },
+        { error: 'Instagram account not connected. Please connect in Settings.' },
         { status: 401 }
       );
     }

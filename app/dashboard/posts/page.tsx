@@ -553,7 +553,17 @@ export default function PostsPage() {
             {/* Thumbnail */}
             <div className="relative aspect-square bg-background-tertiary rounded-t-lg flex items-center justify-center overflow-hidden transition-all duration-300 group-hover:scale-105">
               {draft.videoUrl ? (
-                <video src={draft.videoUrl} className="w-full h-full object-cover" />
+                <video 
+                  src={draft.videoUrl} 
+                  className="w-full h-full object-cover" 
+                  preload="metadata"
+                  muted
+                  playsInline
+                  onLoadedMetadata={(e) => {
+                    const video = e.target as HTMLVideoElement
+                    video.currentTime = 0.5
+                  }}
+                />
               ) : draft.thumbnailUrl ? (
                 <img src={draft.thumbnailUrl} alt="" className="w-full h-full object-cover" />
               ) : (

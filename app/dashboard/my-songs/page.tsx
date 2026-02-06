@@ -15,11 +15,16 @@ interface SavedSong {
   prompt?: string
 }
 
+interface AudioError {
+  [key: string]: string
+}
+
 export default function MySongsPage() {
   const [songs, setSongs] = useState<SavedSong[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState('')
   const [playingSongId, setPlayingSongId] = useState<string | null>(null)
+  const [audioErrors, setAudioErrors] = useState<AudioError>({})
 
   useEffect(() => {
     fetchSavedSongs()
@@ -57,8 +62,25 @@ export default function MySongsPage() {
     }
   }
 
-  const togglePlay = (songId: string) => {
+  const togglePlay = (songId: string, audioUrl: string) => {
+    if (!audioUrl || audioUrl === '') {
+      setAudioErrors({ ...audioErrors, [songId]: 'Audio URL not available' })
+      return
+    }
+    
+    // Clear any previous error for this song
+    if (audioErrors[songId]) {
+      const newErrors = { ...audioErrors }
+      delete newErrors[songId]
+      setAudioErrors(newErrors)
+    }
+    
     setPlayingSongId(playingSongId === songId ? null : songId)
+  }
+
+  const handleAudioError = (songId: string) => {
+    setAudioErrors({ ...audioErrors, [songId]: 'Failed to load audio. The file may be unavailable.' })
+    setPlayingSongId(null)
   }
 
   const filteredSongs = songs.filter(song =>
@@ -162,8 +184,9 @@ export default function MySongsPage() {
                   )}
                   {/* Play Button Overlay */}
                   <button
-                    onClick={() => togglePlay(song.id)}
+                    onClick={() => togglePlay(song.id, song.audioUrl)}
                     className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                    disabled={!song.audioUrl}
                   >
                     {playingSongId === song.id ? (
                       <Pause className="w-16 h-16 text-white" />
@@ -205,25 +228,52 @@ export default function MySongsPage() {
                   )}
 
                   {/* Audio Player */}
-                  {playingSongId === song.id && (
-                    <audio
-                      src={song.audioUrl}
-                      autoPlay
-                      controls
-                      className="w-full mb-3"
-                      onEnded={() => setPlayingSongId(null)}
-                    />
+                  {playingSongId === song.id && song.audioUrl && (
+                    <div className="mb-3">
+                      <audio
+                        src={song.audioUrl}
+                        autoPlay
+                        controls
+                        className="w-full"
+                        onEnded={() => setPlayingSongId(null)}
+                        onError={() => handleAudioError(song.id)}
+                      />
+                    </div>
+                  )}
+
+                  {/* Error Message */}
+                  {audioErrors[song.id] && (
+                    <div className="mb-3 p-2 bg-red-500/20 border border-red-500/50 rounded text-xs text-red-400">
+                      {audioErrors[song.id]}
+                    </div>
+                  )}
+
+                  {/* Warning if no audio URL */}
+                  {!song.audioUrl && (
+                    <div className="mb-3 p-2 bg-yellow-500/20 border border-yellow-500/50 rounded text-xs text-yellow-400">
+                      Audio not available. Song may still be processing.
+                    </div>
                   )}
 
                   {/* Action Buttons */}
                   <div className="flex gap-2">
-                    <button
-                      onClick={() => window.open(song.audioUrl, '_blank')}
-                      className="flex-1 px-3 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 transition-all flex items-center justify-center gap-2 text-sm"
-                    >
-                      <Download className="w-4 h-4" />
-                      Download
-                    </button>
+                    {song.audioUrl ? (
+                      <button
+                        onClick={() => window.open(song.audioUrl, '_blank')}
+                        className="flex-1 px-3 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 transition-all flex items-center justify-center gap-2 text-sm"
+                      >
+                        <Download className="w-4 h-4" />
+                        Download
+                      </button>
+                    ) : (
+                      <button
+                        disabled
+                        className="flex-1 px-3 py-2 bg-gray-600/20 text-gray-400 rounded-lg cursor-not-allowed flex items-center justify-center gap-2 text-sm"
+                      >
+                        <Download className="w-4 h-4" />
+                        Not Available
+                      </button>
+                    )}
                     <button
                       onClick={() => handleDelete(song.id)}
                       className="px-3 py-2 bg-red-600/20 text-red-400 rounded-lg hover:bg-red-600/30 transition-all"

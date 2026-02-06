@@ -455,8 +455,12 @@ export default function MyMediaPage() {
                         src={item.url}
                         className="w-full h-full object-contain"
                         controls
-                        preload="none"
-                        poster="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='%236b7280' d='M8 5v14l11-7z'/%3E%3C/svg%3E"
+                        preload="metadata"
+                        playsInline
+                        onLoadedMetadata={(e) => {
+                          const video = e.target as HTMLVideoElement
+                          video.currentTime = 0.5 // Seek to 0.5 seconds to show first frame
+                        }}
                       />
                     ) : (
                       <>
