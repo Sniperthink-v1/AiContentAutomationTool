@@ -1,4 +1,4 @@
-require('dotenv').config({ path: '.env.local' });
+require('dotenv').config({ path: '.env' });
 const { Pool } = require('pg');
 
 const pool = new Pool({
@@ -17,6 +17,9 @@ async function createDraftsTable() {
         thumbnail_url TEXT,
         settings JSONB DEFAULT '{}',
         status VARCHAR(50) DEFAULT 'generating',
+        scheduled_date TIMESTAMP WITH TIME ZONE,
+        posted_at TIMESTAMP WITH TIME ZONE,
+        instagram_media_id TEXT,
         created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
         updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
       )
