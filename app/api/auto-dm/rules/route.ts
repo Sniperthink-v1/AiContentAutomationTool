@@ -13,7 +13,7 @@ export async function GET(request: NextRequest) {
     }
 
     const result = await pool.query(
-      `SELECT id, keyword, dm_message, is_active, created_at, updated_at
+      `SELECT id, keyword, dm_message, media_id, is_active, created_at, updated_at
        FROM auto_dm_rules 
        WHERE user_id = $1
        ORDER BY created_at DESC`,
@@ -52,7 +52,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { keyword, dmMessage } = body;
+    const { keyword, dmMessage, mediaId } = body;
 
     if (!keyword || !dmMessage) {
       return NextResponse.json(
@@ -63,10 +63,10 @@ export async function POST(request: NextRequest) {
 
     // Insert rule
     const result = await pool.query(
-      `INSERT INTO auto_dm_rules (user_id, ig_user_id, keyword, dm_message, access_token, is_active)
-       VALUES ($1, $2, $3, $4, $5, true)
-       RETURNING id, keyword, dm_message, is_active, created_at`,
-      [user.id, tokenData.igUserId, keyword, dmMessage, tokenData.accessToken]
+      `INSERT INTO auto_dm_rules (user_id, ig_user_id, keyword, dm_message, media_id, access_token, is_active)
+       VALUES ($1, $2, $3, $4, $5, $6, true)
+       RETURNING id, keyword, dm_message, media_id, is_active, created_at`,
+      [user.id, tokenData.igUserId, keyword, dmMessage, mediaId || null, tokenData.accessToken]
     );
 
     return NextResponse.json({
@@ -93,7 +93,7 @@ export async function PUT(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { ruleId, keyword, dmMessage, isActive } = body;
+    const { ruleId, keyword, dmMessage, mediaId, isActive } = body;
 
     if (!ruleId) {
       return NextResponse.json(
@@ -107,11 +107,12 @@ export async function PUT(request: NextRequest) {
       `UPDATE auto_dm_rules 
        SET keyword = COALESCE($1, keyword),
            dm_message = COALESCE($2, dm_message),
-           is_active = COALESCE($3, is_active),
+           media_id = COALESCE($3, media_id),
+           is_active = COALESCE($4, is_active),
            updated_at = NOW()
-       WHERE id = $4 AND user_id = $5
-       RETURNING id, keyword, dm_message, is_active, updated_at`,
-      [keyword, dmMessage, isActive, ruleId, user.id]
+       WHERE id = $5 AND user_id = $6
+       RETURNING id, keyword, dm_message, media_id, is_active, updated_at`,
+      [keyword, dmMessage, mediaId, isActive, ruleId, user.id]
     );
 
     if (result.rows.length === 0) {

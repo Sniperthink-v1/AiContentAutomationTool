@@ -96,12 +96,13 @@ async function processCommentForKeywords(data: {
   igUserId: string;
 }) {
   try {
-    // Get keyword rules from database
+    // Get keyword rules from database - either global or specific to this media
     const rulesResult = await pool.query(
-      `SELECT keyword, dm_message, access_token 
+      `SELECT keyword, dm_message, access_token, media_id 
        FROM auto_dm_rules 
-       WHERE ig_user_id = $1 AND is_active = true`,
-      [data.igUserId]
+       WHERE ig_user_id = $1 AND is_active = true 
+       AND (media_id IS NULL OR media_id = $2)`,
+      [data.igUserId, data.mediaId]
     );
 
     const rules = rulesResult.rows;

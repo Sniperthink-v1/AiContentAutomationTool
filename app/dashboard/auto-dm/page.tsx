@@ -8,6 +8,7 @@ interface AutoDMRule {
   id: number
   keyword: string
   dm_message: string
+  media_id?: string | null
   is_active: boolean
   created_at: string
   updated_at: string
@@ -21,14 +22,27 @@ interface AutoDMLog {
   sent_at: string
 }
 
+interface InstagramMedia {
+  id: string
+  caption?: string
+  media_type: string
+  media_url: string
+  thumbnail_url?: string
+  permalink: string
+  timestamp: string
+}
+
 export default function AutoDMPage() {
   const [rules, setRules] = useState<AutoDMRule[]>([])
   const [logs, setLogs] = useState<AutoDMLog[]>([])
+  const [media, setMedia] = useState<InstagramMedia[]>([])
   const [isLoading, setIsLoading] = useState(true)
+  const [isLoadingMedia, setIsLoadingMedia] = useState(false)
   const [showAddModal, setShowAddModal] = useState(false)
   const [showLogsModal, setShowLogsModal] = useState(false)
   const [newKeyword, setNewKeyword] = useState('')
   const [newMessage, setNewMessage] = useState('')
+  const [selectedMediaId, setSelectedMediaId] = useState<string>('')
   const { showToast } = useToast()
 
   const loadRules = async () => {
@@ -44,6 +58,21 @@ export default function AutoDMPage() {
       showToast('Failed to load auto-DM rules', 'error')
     } finally {
       setIsLoading(false)
+    }
+  }
+
+  const loadMedia = async () => {
+    setIsLoadingMedia(true)
+    try {
+      const response = await fetch('/api/comments/media?limit=20')
+      const data = await response.json()
+      if (data.success) {
+        setMedia(data.media)
+      }
+    } catch (error) {
+      console.error('Failed to load media:', error)
+    } finally {
+      setIsLoadingMedia(false)
     }
   }
 
@@ -78,6 +107,7 @@ export default function AutoDMPage() {
         body: JSON.stringify({
           keyword: newKeyword,
           dmMessage: newMessage,
+          mediaId: selectedMediaId || null,
         }),
       })
 
@@ -87,6 +117,7 @@ export default function AutoDMPage() {
         showToast('Auto-DM rule created successfully!', 'success')
         setNewKeyword('')
         setNewMessage('')
+        setSelectedMediaId('')
         setShowAddModal(false)
         loadRules()
       } else {
@@ -161,7 +192,10 @@ export default function AutoDMPage() {
               View Logs
             </button>
             <button
-              onClick={() => setShowAddModal(true)}
+              onClick={() => {
+                setShowAddModal(true)
+                loadMedia()
+              }}
               className="px-4 py-2 bg-primary hover:bg-primary-hover text-primary-foreground rounded-lg flex items-center gap-2 transition-colors"
             >
               <Plus className="w-4 h-4" />
@@ -175,7 +209,7 @@ export default function AutoDMPage() {
           <h3 className="font-semibold text-blue-400 mb-2">📌 How it works:</h3>
           <ul className="text-sm text-foreground-secondary space-y-1">
             <li>• When someone comments with your trigger keyword, they&apos;ll automatically receive a DM</li>
-            <li>• Make sure your Instagram webhook is configured in Meta Developer Console</li>
+            <li>• Choose &quot;All Posts&quot; for global keywords, or select a specific post/reel</li>
             <li>• Keywords are case-insensitive (e.g., &quot;LINK&quot; matches &quot;link&quot;, &quot;Link&quot;, etc.)</li>
             <li>• Each comment triggers only ONE rule (first match)</li>
           </ul>
@@ -218,6 +252,15 @@ export default function AutoDMPage() {
                       }`}>
                         {rule.is_active ? 'Active' : 'Disabled'}
                       </span>
+                      {rule.media_id ? (
+                        <span className="px-3 py-1 bg-purple-500/20 text-purple-400 rounded-full text-sm font-medium">
+                          Specific Post
+                        </span>
+                      ) : (
+                        <span className="px-3 py-1 bg-blue-500/20 text-blue-400 rounded-full text-sm font-medium">
+                          All Posts
+                        </span>
+                      )}
                     </div>
                     <p className="text-foreground-secondary text-sm">
                       Created: {new Date(rule.created_at).toLocaleString()}
@@ -256,10 +299,35 @@ export default function AutoDMPage() {
         {/* Add Rule Modal */}
         {showAddModal && (
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-            <div className="bg-background-secondary rounded-xl shadow-2xl max-w-lg w-full p-6">
+            <div className="bg-background-secondary rounded-xl shadow-2xl max-w-2xl w-full p-6 max-h-[90vh] overflow-y-auto">
               <h2 className="text-2xl font-bold text-foreground mb-6">Add Auto-DM Rule</h2>
               
               <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-foreground mb-2">
+                    Apply to
+                  </label>
+                  <select
+                    value={selectedMediaId}
+                    onChange={(e) => setSelectedMediaId(e.target.value)}
+                    className="w-full px-4 py-2 bg-background-primary border border-border rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+                  >
+                    <option value="">All Posts (Global)</option>
+                    {isLoadingMedia ? (
+                      <option disabled>Loading posts...</option>
+                    ) : (
+                      media.map((item) => (
+                        <option key={item.id} value={item.id}>
+                          {item.media_type} - {item.caption?.slice(0, 50) || 'No caption'} ({new Date(item.timestamp).toLocaleDateString()})
+                        </option>
+                      ))
+                    )}
+                  </select>
+                  <p className="text-xs text-foreground-tertiary mt-1">
+                    Choose &quot;All Posts&quot; or select a specific post/reel
+                  </p>
+                </div>
+
                 <div>
                   <label className="block text-sm font-medium text-foreground mb-2">
                     Trigger Keyword
@@ -299,6 +367,7 @@ export default function AutoDMPage() {
                     setShowAddModal(false)
                     setNewKeyword('')
                     setNewMessage('')
+                    setSelectedMediaId('')
                   }}
                   className="flex-1 px-4 py-2 bg-background-tertiary hover:bg-background-primary text-foreground rounded-lg transition-colors"
                 >
