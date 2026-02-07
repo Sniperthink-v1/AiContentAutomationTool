@@ -110,7 +110,11 @@ export default function PostsPage() {
       const response = await fetch(url)
       const data = await response.json()
       if (data.success) {
-        setDrafts(data.drafts)
+        // Filter out 'generating' and 'ready' status - those should stay in AI Video page
+        const filteredDrafts = data.drafts.filter((draft: Draft) => 
+          draft.status !== 'generating' && draft.status !== 'ready'
+        )
+        setDrafts(filteredDrafts)
       }
     } catch (error) {
       console.error('Failed to load drafts:', error)
@@ -673,7 +677,7 @@ export default function PostsPage() {
                         <Send className="w-4 h-4" />
                         Post Now
                       </button>
-                    ) : (
+                    ) : draft.status === 'draft' && (draft.videoUrl || draft.thumbnailUrl) ? (
                       <button 
                         onClick={() => {
                           setCurrentDraftId(draft.id)
@@ -684,7 +688,7 @@ export default function PostsPage() {
                         <Clock className="w-4 h-4" />
                         Schedule
                       </button>
-                    )}
+                    ) : null}
                   </>
                 )}
               </div>
