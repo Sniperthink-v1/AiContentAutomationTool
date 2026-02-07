@@ -20,7 +20,12 @@ import {
   Search,
   Filter,
   MoreHorizontal,
-  ExternalLink
+  ExternalLink,
+  Sparkles,
+  Plus,
+  Power,
+  PowerOff,
+  Zap
 } from 'lucide-react'
 import { useToast } from '@/lib/components/Toast'
 
@@ -44,13 +49,25 @@ interface Media {
   comments_count?: number
 }
 
+interface AutoDMRule {
+  id: number
+  keyword: string
+  dm_message: string
+  media_id?: string | null
+  is_active: boolean
+  created_at: string
+  updated_at: string
+}
+
 export default function CommentsPage() {
   const { showToast, ToastContainer } = useToast()
   const [media, setMedia] = useState<Media[]>([])
   const [selectedMedia, setSelectedMedia] = useState<Media | null>(null)
   const [comments, setComments] = useState<Comment[]>([])
+  const [autoDMRules, setAutoDMRules] = useState<AutoDMRule[]>([])
   const [isLoadingMedia, setIsLoadingMedia] = useState(true)
   const [isLoadingComments, setIsLoadingComments] = useState(false)
+  const [isLoadingRules, setIsLoadingRules] = useState(false)
   const [replyingTo, setReplyingTo] = useState<string | null>(null)
   const [replyText, setReplyText] = useState('')
   const [isSendingReply, setIsSendingReply] = useState(false)
@@ -58,6 +75,10 @@ export default function CommentsPage() {
   const [searchQuery, setSearchQuery] = useState('')
   const [filterType, setFilterType] = useState<'all' | 'IMAGE' | 'VIDEO' | 'REELS'>('all')
   const [isConnected, setIsConnected] = useState(true)
+  const [showAddRuleModal, setShowAddRuleModal] = useState(false)
+  const [newKeyword, setNewKeyword] = useState('')
+  const [newMessage, setNewMessage] = useState('')
+  const [showAutoDMSection, setShowAutoDMSection] = useState(false)
 
   // Fetch user's media on mount
   useEffect(() => {
@@ -112,6 +133,112 @@ export default function CommentsPage() {
     setSelectedMedia(mediaItem)
     setComments([])
     fetchComments(mediaItem.id)
+    fetchAutoDMRules(mediaItem.id)
+  }
+
+  const fetchAutoDMRules = async (mediaId: string) => {
+    setIsLoadingRules(true)
+    try {
+      const response = await fetch('/api/auto-dm/rules')
+      const data = await response.json()
+      if (data.success) {
+        // Filter rules for this specific media or global rules
+        const relevantRules = data.rules.filter((rule: AutoDMRule) => 
+          !rule.media_id || rule.media_id === mediaId
+        )
+        setAutoDMRules(relevantRules)
+      }
+    } catch (error) {
+      console.error('Failed to load auto-DM rules:', error)
+    } finally {
+      setIsLoadingRules(false)
+    }
+  }
+
+  const handleAddRule = async () => {
+    if (!newKeyword || !newMessage) {
+      showToast('Please enter keyword and message', 'error')
+      return
+    }
+
+    if (!selectedMedia) {
+      showToast('Please select a post first', 'error')
+      return
+    }
+
+    try {
+      const response = await fetch('/api/auto-dm/rules', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          keyword: newKeyword,
+          dmMessage: newMessage,
+          mediaId: selectedMedia.id,
+        }),
+      })
+
+      const data = await response.json()
+      
+      if (data.success) {
+        showToast('Auto-DM rule created successfully!', 'success')
+        setNewKeyword('')
+        setNewMessage('')
+        setShowAddRuleModal(false)
+        fetchAutoDMRules(selectedMedia.id)
+      } else {
+        showToast(data.error || 'Failed to create rule', 'error')
+      }
+    } catch (error) {
+      console.error('Failed to create rule:', error)
+      showToast('Failed to create rule', 'error')
+    }
+  }
+
+  const handleToggleRule = async (ruleId: number, isActive: boolean) => {
+    try {
+      const response = await fetch('/api/auto-dm/rules', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ruleId,
+          isActive: !isActive,
+        }),
+      })
+
+      const data = await response.json()
+      
+      if (data.success) {
+        showToast(`Rule ${!isActive ? 'enabled' : 'disabled'}`, 'success')
+        if (selectedMedia) {
+          fetchAutoDMRules(selectedMedia.id)
+        }
+      }
+    } catch (error) {
+      console.error('Failed to toggle rule:', error)
+      showToast('Failed to update rule', 'error')
+    }
+  }
+
+  const handleDeleteRule = async (ruleId: number) => {
+    if (!confirm('Are you sure you want to delete this rule?')) return
+
+    try {
+      const response = await fetch(`/api/auto-dm/rules?ruleId=${ruleId}`, {
+        method: 'DELETE',
+      })
+
+      const data = await response.json()
+      
+      if (data.success) {
+        showToast('Rule deleted successfully', 'success')
+        if (selectedMedia) {
+          fetchAutoDMRules(selectedMedia.id)
+        }
+      }
+    } catch (error) {
+      console.error('Failed to delete rule:', error)
+      showToast('Failed to delete rule', 'error')
+    }
   }
 
   const handleReply = async (commentId: string) => {
@@ -422,6 +549,108 @@ export default function CommentsPage() {
                   </button>
                 </div>
 
+                {/* Auto-DM Section */}
+                <div className="mb-6">
+                  <button
+                    onClick={() => setShowAutoDMSection(!showAutoDMSection)}
+                    className="w-full flex items-center justify-between p-4 bg-gradient-to-r from-purple-500/10 to-blue-500/10 border border-purple-500/20 rounded-lg hover:border-purple-500/40 transition-colors"
+                  >
+                    <div className="flex items-center gap-3">
+                      <Zap className="w-5 h-5 text-purple-400" />
+                      <div className="text-left">
+                        <h3 className="font-semibold text-foreground">Auto-DM Rules for this Post</h3>
+                        <p className="text-sm text-foreground-secondary">
+                          {autoDMRules.length} rule{autoDMRules.length !== 1 ? 's' : ''} active
+                        </p>
+                      </div>
+                    </div>
+                    <ChevronDown className={`w-5 h-5 text-foreground-secondary transition-transform ${showAutoDMSection ? 'rotate-180' : ''}`} />
+                  </button>
+
+                  {showAutoDMSection && (
+                    <div className="mt-4 space-y-3">
+                      {/* Add Rule Button */}
+                      <button
+                        onClick={() => setShowAddRuleModal(true)}
+                        className="w-full p-3 bg-primary hover:bg-primary-hover text-primary-foreground rounded-lg flex items-center justify-center gap-2 transition-colors"
+                      >
+                        <Plus className="w-4 h-4" />
+                        Add Auto-DM Rule
+                      </button>
+
+                      {/* Rules List */}
+                      {isLoadingRules ? (
+                        <div className="flex items-center justify-center py-8">
+                          <Loader2 className="w-6 h-6 animate-spin text-primary" />
+                        </div>
+                      ) : autoDMRules.length === 0 ? (
+                        <div className="text-center py-6 bg-background-secondary rounded-lg">
+                          <Sparkles className="w-12 h-12 text-foreground-tertiary mx-auto mb-3" />
+                          <p className="text-foreground-secondary text-sm">
+                            No auto-DM rules for this post yet
+                          </p>
+                        </div>
+                      ) : (
+                        <div className="space-y-2">
+                          {autoDMRules.map((rule) => (
+                            <div
+                              key={rule.id}
+                              className="p-4 bg-background-secondary border border-border rounded-lg"
+                            >
+                              <div className="flex items-start justify-between mb-2">
+                                <div className="flex items-center gap-2 flex-1">
+                                  <span className="px-3 py-1 bg-primary/20 text-primary rounded-full text-sm font-medium">
+                                    {rule.keyword}
+                                  </span>
+                                  {rule.media_id ? (
+                                    <span className="px-2 py-1 bg-purple-500/20 text-purple-400 rounded text-xs">
+                                      This Post
+                                    </span>
+                                  ) : (
+                                    <span className="px-2 py-1 bg-blue-500/20 text-blue-400 rounded text-xs">
+                                      All Posts
+                                    </span>
+                                  )}
+                                  <span className={`px-2 py-1 rounded text-xs ${
+                                    rule.is_active 
+                                      ? 'bg-green-500/20 text-green-400' 
+                                      : 'bg-gray-500/20 text-gray-400'
+                                  }`}>
+                                    {rule.is_active ? 'Active' : 'Disabled'}
+                                  </span>
+                                </div>
+                                <div className="flex gap-1">
+                                  <button
+                                    onClick={() => handleToggleRule(rule.id, rule.is_active)}
+                                    className={`p-1.5 rounded transition-colors ${
+                                      rule.is_active
+                                        ? 'bg-green-500/20 hover:bg-green-500/30 text-green-400'
+                                        : 'bg-gray-500/20 hover:bg-gray-500/30 text-gray-400'
+                                    }`}
+                                    title={rule.is_active ? 'Disable' : 'Enable'}
+                                  >
+                                    {rule.is_active ? <Power className="w-3.5 h-3.5" /> : <PowerOff className="w-3.5 h-3.5" />}
+                                  </button>
+                                  <button
+                                    onClick={() => handleDeleteRule(rule.id)}
+                                    className="p-1.5 bg-red-500/20 hover:bg-red-500/30 text-red-400 rounded transition-colors"
+                                    title="Delete"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </button>
+                                </div>
+                              </div>
+                              <p className="text-sm text-foreground-secondary mt-2">
+                                {rule.dm_message}
+                              </p>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+
                 {/* Comments List */}
                 <div className="space-y-4">
                   <h3 className="text-lg font-semibold text-foreground flex items-center gap-2">
@@ -575,6 +804,74 @@ export default function CommentsPage() {
           </div>
         </div>
       </div>
+
+      {/* Add Auto-DM Rule Modal */}
+      {showAddRuleModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-background-secondary rounded-xl shadow-2xl max-w-lg w-full p-6">
+            <h2 className="text-2xl font-bold text-foreground mb-6">Add Auto-DM Rule</h2>
+            
+            <div className="space-y-4">
+              <div className="p-3 bg-purple-500/10 border border-purple-500/20 rounded-lg">
+                <p className="text-sm text-foreground-secondary">
+                  <span className="font-semibold text-purple-400">For this post:</span> {selectedMedia?.caption?.slice(0, 60) || 'No caption'}...
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-foreground mb-2">
+                  Trigger Keyword
+                </label>
+                <input
+                  type="text"
+                  value={newKeyword}
+                  onChange={(e) => setNewKeyword(e.target.value)}
+                  placeholder="e.g., link, price, info"
+                  className="w-full px-4 py-2 bg-background-primary border border-border rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+                />
+                <p className="text-xs text-foreground-tertiary mt-1">
+                  When someone comments this word on this post, they&apos;ll get a DM
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-foreground mb-2">
+                  DM Message
+                </label>
+                <textarea
+                  value={newMessage}
+                  onChange={(e) => setNewMessage(e.target.value)}
+                  placeholder="Hi! Thanks for your interest! Check out: https://..."
+                  rows={4}
+                  className="w-full px-4 py-2 bg-background-primary border border-border rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-primary resize-none"
+                />
+                <p className="text-xs text-foreground-tertiary mt-1">
+                  This message will be sent automatically
+                </p>
+              </div>
+            </div>
+
+            <div className="flex gap-3 mt-6">
+              <button
+                onClick={() => {
+                  setShowAddRuleModal(false)
+                  setNewKeyword('')
+                  setNewMessage('')
+                }}
+                className="flex-1 px-4 py-2 bg-background-tertiary hover:bg-background-primary text-foreground rounded-lg transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleAddRule}
+                className="flex-1 px-4 py-2 bg-primary hover:bg-primary-hover text-primary-foreground rounded-lg transition-colors"
+              >
+                Create Rule
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

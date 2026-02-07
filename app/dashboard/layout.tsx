@@ -41,7 +41,6 @@ const navigation = [
   { name: 'My Media', href: '/dashboard/my-media', icon: FolderOpen },
   { name: 'Thumbnails', href: '/dashboard/thumbnails', icon: ImagePlus },
   { name: 'Comments', href: '/dashboard/comments', icon: MessageCircle },
-  { name: 'Auto-DM', href: '/dashboard/auto-dm', icon: Sparkles },
   { name: 'Analytics', href: '/dashboard/analytics', icon: BarChart3 },
   { name: 'Settings', href: '/dashboard/settings', icon: Settings },
 ]
