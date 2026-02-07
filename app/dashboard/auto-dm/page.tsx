@@ -31,10 +31,6 @@ export default function AutoDMPage() {
   const [newMessage, setNewMessage] = useState('')
   const { showToast } = useToast()
 
-  useEffect(() => {
-    loadRules()
-  }, [])
-
   const loadRules = async () => {
     setIsLoading(true)
     try {
@@ -50,6 +46,10 @@ export default function AutoDMPage() {
       setIsLoading(false)
     }
   }
+
+  useEffect(() => {
+    loadRules()
+  }, [])
 
   const loadLogs = async () => {
     try {
@@ -174,9 +174,9 @@ export default function AutoDMPage() {
         <div className="bg-blue-500/10 border border-blue-500/20 rounded-lg p-4 mb-6">
           <h3 className="font-semibold text-blue-400 mb-2">📌 How it works:</h3>
           <ul className="text-sm text-foreground-secondary space-y-1">
-            <li>• When someone comments with your trigger keyword, they'll automatically receive a DM</li>
+            <li>• When someone comments with your trigger keyword, they&apos;ll automatically receive a DM</li>
             <li>• Make sure your Instagram webhook is configured in Meta Developer Console</li>
-            <li>• Keywords are case-insensitive (e.g., "LINK" matches "link", "Link", etc.)</li>
+            <li>• Keywords are case-insensitive (e.g., &quot;LINK&quot; matches &quot;link&quot;, &quot;Link&quot;, etc.)</li>
             <li>• Each comment triggers only ONE rule (first match)</li>
           </ul>
         </div>
@@ -272,7 +272,7 @@ export default function AutoDMPage() {
                     className="w-full px-4 py-2 bg-background-primary border border-border rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
                   />
                   <p className="text-xs text-foreground-tertiary mt-1">
-                    When someone comments this word, they'll get a DM
+                    When someone comments this word, they&apos;ll get a DM
                   </p>
                 </div>
 

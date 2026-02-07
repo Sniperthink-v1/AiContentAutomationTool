@@ -52,6 +52,14 @@ export async function GET(request: NextRequest) {
       igUserId = integration.platform_user_id;
     }
 
+    // Final check to ensure both values exist
+    if (!accessToken || !igUserId) {
+      return NextResponse.json(
+        { error: 'Instagram account not properly configured. Please reconnect in Settings.' },
+        { status: 401 }
+      );
+    }
+
     const { searchParams } = new URL(request.url);
     const limit = parseInt(searchParams.get('limit') || '20');
 
