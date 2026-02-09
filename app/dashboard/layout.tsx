@@ -73,7 +73,6 @@ function DashboardLayoutInner({
   const notificationRef = useRef<HTMLDivElement>(null)
   const [isInstagramConnected, setIsInstagramConnected] = useState<boolean | null>(null)
   const [isCheckingConnection, setIsCheckingConnection] = useState(true)
-  const [schedulerStarted, setSchedulerStarted] = useState(false)
 
   // Use notification context for notifications
   const { 
@@ -84,26 +83,6 @@ function DashboardLayoutInner({
     markAsRead, 
     markAllAsRead 
   } = useNotifications()
-
-  // Start the scheduler when dashboard loads
-  useEffect(() => {
-    const startScheduler = async () => {
-      try {
-        const response = await fetch('/api/scheduler/start')
-        const data = await response.json()
-        if (data.success) {
-          console.log('✅ Auto-scheduler started - checking every 1 minute')
-          setSchedulerStarted(true)
-        }
-      } catch (error) {
-        console.error('Failed to start scheduler:', error)
-      }
-    }
-
-    if (!schedulerStarted) {
-      startScheduler()
-    }
-  }, [schedulerStarted])
 
   // Close notification dropdown when clicking outside
   useEffect(() => {
