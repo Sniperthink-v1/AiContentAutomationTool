@@ -24,12 +24,13 @@ export interface Draft {
 }
 
 export interface CreateDraftRequest {
+  id?: string  // Optional ID for updates
   originalPrompt: string
   enhancedScript: string
   videoUrl?: string
   thumbnailUrl?: string
   settings: VideoSettings
-  status?: 'generating' | 'ready'
+  status?: 'generating' | 'ready' | 'draft' | 'scheduled' | 'published' | 'failed'
 }
 
 export interface UpdateDraftRequest {
