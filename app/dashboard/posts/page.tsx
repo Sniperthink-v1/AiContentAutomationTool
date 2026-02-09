@@ -78,6 +78,76 @@ export default function PostsPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filter])
 
+  // Auto-check for scheduled posts every 2 minutes when viewing scheduled tab
+  useEffect(() => {
+    if (filter !== 'scheduled') return
+
+    const checkScheduled = async () => {
+      const now = new Date()
+      const dueDrafts = drafts.filter(draft => 
+        draft.status === 'scheduled' && 
+        draft.scheduledDate && 
+        new Date(draft.scheduledDate) <= now
+      )
+
+      if (dueDrafts.length > 0) {
+        console.log(`⏰ Auto-check: Found ${dueDrafts.length} post(s) due for publishing`)
+        // Process scheduled posts automatically
+        for (const draft of dueDrafts) {
+          try {
+            const mediaUrl = draft.videoUrl || draft.thumbnailUrl
+            if (!mediaUrl) continue
+
+            const postType = draft.videoUrl ? 'reel' : 'image'
+            const caption = draft.enhancedScript || draft.originalPrompt || ''
+
+            const instagramResponse = await fetch('/api/instagram/post', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                type: postType,
+                mediaUrl: mediaUrl,
+                caption: caption
+              })
+            })
+
+            const instagramData = await instagramResponse.json()
+            
+            if (instagramData.success) {
+              await fetch('/api/drafts/save', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  id: draft.id,
+                  originalPrompt: draft.originalPrompt,
+                  enhancedScript: draft.enhancedScript,
+                  videoUrl: draft.videoUrl,
+                  thumbnailUrl: draft.thumbnailUrl,
+                  settings: draft.settings,
+                  status: 'published'
+                })
+              })
+              console.log(`✅ Auto-posted: ${draft.originalPrompt?.substring(0, 30)}...`)
+              showToast(`✅ Scheduled post published to Instagram!`, 'success')
+            }
+          } catch (error) {
+            console.error('Auto-publish error:', error)
+          }
+        }
+        loadDrafts() // Refresh the list
+      }
+    }
+
+    // Check immediately when switching to scheduled tab
+    checkScheduled()
+
+    // Then check every 2 minutes
+    const interval = setInterval(checkScheduled, 2 * 60 * 1000)
+
+    return () => clearInterval(interval)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filter, drafts])
+
   // Load saved songs
   useEffect(() => {
     if (showCreateModal) {
@@ -157,46 +227,33 @@ export default function PostsPage() {
   const handleCreatePost = async (action: 'now' | 'schedule' | 'draft') => {
     setIsSaving(true)
     try {
-      // Upload file - try Supabase first, fallback to base64
+      // Upload file to R2 cloud storage
       let fileUrl = ''
       if (selectedFile) {
-        // Check if Supabase is configured
-        const hasSupabaseKeys = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY && 
-                                 process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY !== 'your_supabase_anon_key_here'
-        
-        if (hasSupabaseKeys) {
-          try {
-            showToast('Uploading file...', 'info')
-            
-            const formData = new FormData()
-            formData.append('file', selectedFile)
-            formData.append('bucket', postType === 'video' ? 'videos' : 'images')
-            formData.append('folder', 'posts')
+        try {
+          showToast('Uploading file to cloud storage...', 'info')
+          
+          const formData = new FormData()
+          formData.append('file', selectedFile)
 
-            const uploadResponse = await fetch('/api/upload', {
-              method: 'POST',
-              body: formData
-            })
+          const uploadResponse = await fetch('/api/upload', {
+            method: 'POST',
+            body: formData
+          })
 
-            const uploadData = await uploadResponse.json()
-            
-            if (!uploadData.success) {
-              throw new Error(uploadData.error || 'Upload failed')
-            }
-
-            fileUrl = uploadData.url
-            console.log('✅ File uploaded to Supabase:', fileUrl)
-          } catch (error: any) {
-            console.warn('Supabase upload failed, using base64 fallback:', error)
-            // Fallback to base64
-            const base64 = await fileToBase64(selectedFile)
-            fileUrl = base64
+          const uploadData = await uploadResponse.json()
+          
+          if (!uploadData.success) {
+            throw new Error(uploadData.error || 'Upload failed')
           }
-        } else {
-          // Use base64 if Supabase not configured
-          console.log('Using base64 upload (Supabase not configured)')
-          const base64 = await fileToBase64(selectedFile)
-          fileUrl = base64
+
+          fileUrl = uploadData.url
+          console.log('✅ File uploaded to R2:', fileUrl)
+        } catch (error: any) {
+          console.error('R2 upload failed:', error)
+          showToast('Failed to upload file to cloud storage', 'error')
+          setIsSaving(false)
+          return
         }
       }
 
@@ -483,8 +540,42 @@ export default function PostsPage() {
   }
 
   const handlePostNow = async (draft: Draft) => {
+    if (!confirm('Post this to Instagram now?')) {
+      return
+    }
+
     try {
-      const response = await fetch('/api/drafts/save', {
+      showToast('Posting to Instagram...', 'info')
+
+      // Determine media URL and type
+      const mediaUrl = draft.videoUrl || draft.thumbnailUrl
+      if (!mediaUrl) {
+        showToast('No media file found in this draft', 'error')
+        return
+      }
+
+      const postType = draft.videoUrl ? 'reel' : 'image'
+      const caption = draft.enhancedScript || draft.originalPrompt || ''
+
+      // Post to Instagram
+      const instagramResponse = await fetch('/api/instagram/post', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type: postType,
+          mediaUrl: mediaUrl,
+          caption: caption
+        })
+      })
+
+      const instagramData = await instagramResponse.json()
+      
+      if (!instagramData.success) {
+        throw new Error(instagramData.error || 'Failed to post to Instagram')
+      }
+
+      // Update draft status to published
+      await fetch('/api/drafts/save', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -493,23 +584,108 @@ export default function PostsPage() {
           enhancedScript: draft.enhancedScript,
           videoUrl: draft.videoUrl,
           thumbnailUrl: draft.thumbnailUrl,
-          settings: {
-            ...draft.settings,
-            status: 'posted'
-          }
+          settings: draft.settings,
+          status: 'published'
         })
       })
 
-      const data = await response.json()
-      if (data.success) {
-        showToast('Post published successfully!', 'success')
-        loadDrafts()
-      } else {
-        showToast('Failed to publish post: ' + data.error, 'error')
-      }
+      showToast('✅ Posted to Instagram successfully!', 'success')
+      loadDrafts()
+      
     } catch (error) {
-      console.error('Error publishing post:', error)
-      showToast('An error occurred. Please try again.', 'error')
+      console.error('Error posting to Instagram:', error)
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+      showToast(`Failed to post: ${errorMessage}`, 'error')
+    }
+  }
+
+  const handleProcessScheduled = async () => {
+    try {
+      showToast('Checking for scheduled posts...', 'info')
+      
+      // Get all scheduled drafts that are due
+      const now = new Date()
+      const dueDrafts = drafts.filter(draft => 
+        draft.status === 'scheduled' && 
+        draft.scheduledDate && 
+        new Date(draft.scheduledDate) <= now
+      )
+
+      if (dueDrafts.length === 0) {
+        showToast('No scheduled posts are due yet', 'info')
+        return
+      }
+
+      showToast(`Publishing ${dueDrafts.length} post(s)...`, 'info')
+      
+      let published = 0
+      let failed = 0
+
+      for (const draft of dueDrafts) {
+        try {
+          // Determine media URL and type
+          const mediaUrl = draft.videoUrl || draft.thumbnailUrl
+          if (!mediaUrl) {
+            console.error('No media URL for draft:', draft.id)
+            failed++
+            continue
+          }
+
+          const postType = draft.videoUrl ? 'reel' : 'image'
+          const caption = draft.enhancedScript || draft.originalPrompt || ''
+
+          // Post to Instagram
+          const instagramResponse = await fetch('/api/instagram/post', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              type: postType,
+              mediaUrl: mediaUrl,
+              caption: caption
+            })
+          })
+
+          const instagramData = await instagramResponse.json()
+          
+          if (!instagramData.success) {
+            throw new Error(instagramData.error || 'Failed to post')
+          }
+
+          // Update draft status to published
+          await fetch('/api/drafts/save', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              id: draft.id,
+              originalPrompt: draft.originalPrompt,
+              enhancedScript: draft.enhancedScript,
+              videoUrl: draft.videoUrl,
+              thumbnailUrl: draft.thumbnailUrl,
+              settings: draft.settings,
+              status: 'published'
+            })
+          })
+
+          published++
+          
+        } catch (error) {
+          console.error('Error publishing draft:', draft.id, error)
+          failed++
+        }
+      }
+
+      if (published > 0) {
+        showToast(`✅ Published ${published} post(s) successfully!`, 'success')
+        loadDrafts()
+      }
+      
+      if (failed > 0) {
+        showToast(`⚠️ ${failed} post(s) failed to publish`, 'error')
+      }
+
+    } catch (error) {
+      console.error('Error processing scheduled posts:', error)
+      showToast('An error occurred while processing scheduled posts', 'error')
     }
   }
 
@@ -522,13 +698,25 @@ export default function PostsPage() {
           <h1 className="text-3xl font-bold text-foreground">Posts</h1>
           <p className="text-foreground-secondary mt-1">Manage your Instagram content</p>
         </div>
-        <button 
-          onClick={() => setShowCreateModal(true)}
-          className="btn-primary flex items-center gap-2"
-        >
-          <Plus className="w-5 h-5" />
-          Create Post
-        </button>
+        <div className="flex gap-3">
+          {filter === 'scheduled' && (
+            <button 
+              onClick={handleProcessScheduled}
+              className="btn-secondary flex items-center gap-2"
+              title="Manually process all scheduled posts that are due"
+            >
+              <Clock className="w-5 h-5" />
+              Process Scheduled
+            </button>
+          )}
+          <button 
+            onClick={() => setShowCreateModal(true)}
+            className="btn-primary flex items-center gap-2"
+          >
+            <Plus className="w-5 h-5" />
+            Create Post
+          </button>
+        </div>
       </div>
 
       {/* Filters */}

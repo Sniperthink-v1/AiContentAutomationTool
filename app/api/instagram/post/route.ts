@@ -1,19 +1,50 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import { postImage, postVideo, postStory, postCarousel } from '@/lib/instagram';
+import pool from '@/lib/db';
+import { getAuthUser } from '@/lib/middleware';
 
 export async function POST(request: NextRequest) {
   try {
-    const cookieStore = await cookies();
-    const accessToken = cookieStore.get('ig_access_token')?.value;
-    const igUserId = cookieStore.get('ig_user_id')?.value;
+    // Get authenticated user
+    const user = await getAuthUser(request);
+    
+    if (!user) {
+      return NextResponse.json(
+        { error: 'Not authenticated. Please log in.' },
+        { status: 401 }
+      );
+    }
 
-    if (!accessToken || !igUserId) {
+    // Get Instagram access token from database
+    const result = await pool.query(
+      `SELECT access_token, platform_user_id, token_expires_at, is_active
+       FROM social_integrations 
+       WHERE user_id = $1 AND platform = 'instagram' AND is_active = true`,
+      [user.id]
+    );
+
+    if (result.rows.length === 0) {
       return NextResponse.json(
         { error: 'Instagram account not connected. Please connect your account in Settings.' },
         { status: 401 }
       );
     }
+
+    const integration = result.rows[0];
+    const now = new Date();
+    const expiresAt = new Date(integration.token_expires_at);
+    
+    // Check if token is still valid
+    if (expiresAt <= now) {
+      return NextResponse.json(
+        { error: 'Instagram token expired. Please reconnect your account in Settings.' },
+        { status: 401 }
+      );
+    }
+
+    const accessToken = integration.access_token;
+    const igUserId = integration.platform_user_id;
 
     const body = await request.json();
     const { type, mediaUrl, caption, items, isVideo } = body;

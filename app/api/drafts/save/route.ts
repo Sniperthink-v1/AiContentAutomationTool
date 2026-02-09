@@ -18,6 +18,7 @@ export async function POST(request: NextRequest) {
     const body: CreateDraftRequest = await request.json()
 
     const {
+      id, // Draft ID for updates
       originalPrompt,
       enhancedScript,
       videoUrl,
@@ -30,7 +31,60 @@ export async function POST(request: NextRequest) {
     const finalOriginalPrompt = originalPrompt || 'AI Generated Video'
     const finalEnhancedScript = enhancedScript || originalPrompt || 'AI Generated Video'
 
-    // Insert draft into database with user_id
+    // If ID provided, update existing draft
+    if (id) {
+      const result = await query(
+        `UPDATE drafts 
+         SET original_prompt = $1, 
+             enhanced_script = $2, 
+             video_url = $3, 
+             thumbnail_url = $4, 
+             settings = $5, 
+             status = $6, 
+             updated_at = NOW()
+         WHERE id = $7 AND user_id = $8
+         RETURNING *`,
+        [
+          finalOriginalPrompt,
+          finalEnhancedScript,
+          videoUrl || null,
+          thumbnailUrl || null,
+          JSON.stringify(settings),
+          status,
+          id,
+          user.id
+        ]
+      )
+
+      if (result.rowCount === 0) {
+        return NextResponse.json(
+          { success: false, error: 'Draft not found or not authorized' },
+          { status: 404 }
+        )
+      }
+
+      const draft = result.rows[0]
+
+      return NextResponse.json({
+        success: true,
+        draftId: draft.id,
+        draft: {
+          id: draft.id,
+          originalPrompt: draft.original_prompt,
+          enhancedScript: draft.enhanced_script,
+          videoUrl: draft.video_url,
+          thumbnailUrl: draft.thumbnail_url,
+          settings: draft.settings,
+          status: draft.status,
+          createdAt: draft.created_at,
+          scheduledDate: draft.scheduled_date,
+          postedAt: draft.posted_at
+        },
+        message: 'Draft updated successfully'
+      })
+    }
+
+    // Insert new draft into database with user_id
     const result = await query(
       `INSERT INTO drafts 
         (user_id, original_prompt, enhanced_script, video_url, thumbnail_url, settings, status) 

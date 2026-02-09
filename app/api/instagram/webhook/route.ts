@@ -48,6 +48,18 @@ export async function POST(request: NextRequest) {
     const data = JSON.parse(body);
     console.log('📬 Webhook received:', JSON.stringify(data, null, 2));
 
+    // Log webhook to database for debugging
+    try {
+      await pool.query(
+        `INSERT INTO webhook_logs (event_type, payload, received_at) 
+         VALUES ($1, $2, NOW())`,
+        ['instagram_webhook', data]
+      );
+    } catch (logError) {
+      console.error('Failed to log webhook:', logError);
+      // Continue processing even if logging fails
+    }
+
     // Process each entry
     for (const entry of data.entry || []) {
       for (const change of entry.changes || []) {

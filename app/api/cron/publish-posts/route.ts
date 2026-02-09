@@ -22,20 +22,33 @@ export async function GET(request: NextRequest) {
     // Get all scheduled posts/drafts that are due
     const now = new Date().toISOString()
     
-    const result = await pool.query(
-      `SELECT d.*, si.access_token as ig_access_token, si.platform_user_id as ig_user_id 
-       FROM drafts d
-       JOIN social_integrations si ON d.user_id = si.user_id AND si.platform = 'instagram'
-       WHERE d.status = 'scheduled' 
-       AND d.scheduled_date <= $1
-       AND si.access_token IS NOT NULL
-       AND si.platform_user_id IS NOT NULL
-       AND si.is_active = true
-       AND (si.token_expires_at IS NULL OR si.token_expires_at > NOW())
-       ORDER BY d.scheduled_date ASC
-       LIMIT 10`,
-      [now]
-    )
+    let result
+    try {
+      result = await pool.query(
+        `SELECT d.*, si.access_token as ig_access_token, si.platform_user_id as ig_user_id 
+         FROM drafts d
+         JOIN social_integrations si ON d.user_id = si.user_id AND si.platform = 'instagram'
+         WHERE d.status = 'scheduled' 
+         AND d.scheduled_date <= $1
+         AND si.access_token IS NOT NULL
+         AND si.platform_user_id IS NOT NULL
+         AND si.is_active = true
+         AND (si.token_expires_at IS NULL OR si.token_expires_at > NOW())
+         ORDER BY d.scheduled_date ASC
+         LIMIT 10`,
+        [now]
+      )
+    } catch (dbError) {
+      console.error('❌ Database query error:', dbError)
+      return NextResponse.json(
+        { 
+          success: false, 
+          error: 'Database error',
+          details: dbError instanceof Error ? dbError.message : 'Unknown database error'
+        },
+        { status: 500 }
+      )
+    }
 
     const duePosts = result.rows
     console.log(`📋 Found ${duePosts.length} posts due for publishing`)

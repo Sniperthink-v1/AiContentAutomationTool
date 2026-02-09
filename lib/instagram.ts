@@ -404,10 +404,12 @@ export async function createMediaContainer(
 
   if (!response.ok) {
     const error = await response.json();
+    console.error('❌ Instagram API Error (Create Container):', JSON.stringify(error, null, 2));
     throw new Error(error.error?.message || 'Failed to create media container');
   }
 
   const data = await response.json();
+  console.log('✅ Media container created:', data);
   return data.id; // Container ID
 }
 
@@ -448,10 +450,13 @@ export async function publishMedia(
 
   if (!response.ok) {
     const error = await response.json();
+    console.error('❌ Instagram API Error (Publish Media):', JSON.stringify(error, null, 2));
+    console.error('Container ID used:', containerId);
     throw new Error(error.error?.message || 'Failed to publish media');
   }
 
   const data = await response.json();
+  console.log('✅ Media published successfully:', data);
   return data.id; // Published media ID
 }
 
