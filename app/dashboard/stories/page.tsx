@@ -52,6 +52,7 @@ export default function StoriesPage() {
   const [selectedMusic, setSelectedMusic] = useState<string>('')
   const [savedSongs, setSavedSongs] = useState<any[]>([])
   const [showMusicSelector, setShowMusicSelector] = useState(false)
+  const [filter, setFilter] = useState<'all' | 'scheduled' | 'posted' | 'draft'>('all')
 
   useEffect(() => {
     loadStories()
@@ -261,6 +262,117 @@ export default function StoriesPage() {
     }
   }
 
+  const handlePostNow = async (story: Story) => {
+    if (!confirm('Post this story to Instagram now?')) return
+
+    try {
+      showToast('Posting story to Instagram...', 'info')
+
+      const response = await fetch('/api/instagram/post', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type: 'story',
+          mediaUrl: story.url,
+          isVideo: story.type === 'video'
+        })
+      })
+
+      const data = await response.json()
+
+      if (!data.success) {
+        throw new Error(data.error || 'Failed to post story')
+      }
+
+      // Update story status to posted
+      const updateResponse = await fetch(`/api/stories/${story.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          status: 'posted'
+        })
+      })
+
+      if (!updateResponse.ok) {
+        throw new Error('Failed to update story status')
+      }
+
+      showToast('✅ Story posted to Instagram successfully!', 'success')
+      loadStories()
+    } catch (error) {
+      console.error('Error posting story:', error)
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+      showToast(`Failed to post story: ${errorMessage}`, 'error')
+    }
+  }
+
+  const handleProcessScheduled = async () => {
+    try {
+      showToast('Checking for scheduled stories...', 'info')
+      
+      const now = new Date()
+      const dueStories = stories.filter(story => 
+        story.status === 'scheduled' && 
+        new Date(story.scheduledTime) <= now
+      )
+
+      if (dueStories.length === 0) {
+        showToast('No scheduled stories are due yet', 'info')
+        return
+      }
+
+      showToast(`Posting ${dueStories.length} story(ies)...`, 'info')
+      
+      let posted = 0
+      let failed = 0
+
+      for (const story of dueStories) {
+        try {
+          const response = await fetch('/api/instagram/post', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              type: 'story',
+              mediaUrl: story.url,
+              isVideo: story.type === 'video'
+            })
+          })
+
+          const data = await response.json()
+          
+          if (!data.success) {
+            throw new Error(data.error || 'Failed to post')
+          }
+
+          // Update status to posted
+          await fetch(`/api/stories/${story.id}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ status: 'posted' })
+          })
+
+          posted++
+        } catch (error) {
+          console.error('Error posting story:', story.id, error)
+          failed++
+        }
+      }
+
+      if (posted > 0) {
+        showToast(`✅ Posted ${posted} story(ies) successfully!`, 'success')
+        loadStories()
+      }
+      
+      if (failed > 0) {
+        showToast(`⚠️ ${failed} story(ies) failed to post`, 'error')
+      }
+
+    } catch (error) {
+      console.error('Error processing scheduled stories:', error)
+      showToast('An error occurred while processing scheduled stories', 'error')
+    }
+  }
+
   const formatDateTime = (dateTime: string) => {
     const date = new Date(dateTime)
     return date.toLocaleString('en-US', {
@@ -284,18 +396,48 @@ export default function StoriesPage() {
       <div className="flex items-center justify-between animate-slide-down">
         <div>
           <h1 className="text-3xl font-bold text-foreground">Stories</h1>
-          <p className="text-foreground-secondary mt-1">Schedule and manage Instagram Stories</p>
+          <p className="text-foreground-secondary mt-1">Schedule and manage Instagram Stories (Images: 5s, Videos: up to 60s)</p>
         </div>
-        <label className="btn-primary flex items-center gap-2 cursor-pointer">
-          <Plus className="w-5 h-5" />
-          Add Story
-          <input
-            type="file"
-            accept="image/*,video/*"
-            className="hidden"
-            onChange={handleFileSelect}
-          />
-        </label>
+        <div className="flex gap-3">
+          {filter === 'scheduled' && (
+            <button 
+              onClick={handleProcessScheduled}
+              className="btn-secondary flex items-center gap-2"
+              title="Manually process all scheduled stories that are due"
+            >
+              <Clock className="w-5 h-5" />
+              Process Scheduled
+            </button>
+          )}
+          <label className="btn-primary flex items-center gap-2 cursor-pointer">
+            <Plus className="w-5 h-5" />
+            Add Story
+            <input
+              type="file"
+              accept="image/*,video/*"
+              className="hidden"
+              onChange={handleFileSelect}
+            />
+          </label>
+        </div>
+      </div>
+
+      {/* Filters */}
+      <div className="flex items-center gap-3 overflow-x-auto pb-2 animate-slide-up">
+        {(['all', 'scheduled', 'posted', 'draft'] as const).map((tab, index) => (
+          <button
+            key={tab}
+            onClick={() => setFilter(tab)}
+            style={{ animationDelay: `${index * 50}ms` }}
+            className={`px-4 py-2 rounded-lg font-medium text-sm transition-all duration-300 whitespace-nowrap ${
+              filter === tab
+                ? 'bg-primary text-primary-foreground shadow-lg shadow-primary/20 scale-105'
+                : 'bg-background-tertiary text-foreground-secondary hover:text-foreground hover:bg-background-tertiary/80 hover:scale-105'
+            }`}
+          >
+            {tab.charAt(0).toUpperCase() + tab.slice(1)}
+          </button>
+        ))}
       </div>
 
       {/* Stats */}
@@ -345,7 +487,7 @@ export default function StoriesPage() {
           </div>
         ) : (
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
-            {stories.map((story, index) => (
+            {stories.filter(story => filter === 'all' || story.status === filter).map((story, index) => (
               <div
                 key={story.id}
                 className="group relative bg-background-secondary rounded-xl overflow-hidden border border-border hover:border-primary transition-all duration-300 animate-scale-in hover:scale-105"
@@ -427,14 +569,34 @@ export default function StoriesPage() {
 
                 {/* Story Info */}
                 <div className="p-3">
-                  <div className="flex items-center gap-2 text-xs text-foreground-secondary mb-1">
+                  <div className="flex items-center gap-2 text-xs text-foreground-secondary mb-2">
                     <Clock className="w-3 h-3" />
                     <span className={isScheduledInPast(story.scheduledTime) ? 'text-red-500' : ''}>
                       {formatDateTime(story.scheduledTime)}
                     </span>
                   </div>
                   {story.caption && (
-                    <p className="text-sm text-foreground line-clamp-2">{story.caption}</p>
+                    <p className="text-sm text-foreground line-clamp-2 mb-2">{story.caption}</p>
+                  )}
+                  
+                  {/* Action Button */}
+                  {story.status === 'scheduled' && (
+                    <button
+                      onClick={() => handlePostNow(story)}
+                      className="w-full px-3 py-1.5 bg-primary hover:bg-primary-hover text-primary-foreground rounded-lg text-xs font-medium transition-all duration-300 flex items-center justify-center gap-1"
+                    >
+                      <Upload className="w-3 h-3" />
+                      Post Now
+                    </button>
+                  )}
+                  
+                  {story.status === 'draft' && (
+                    <button
+                      onClick={() => handleEditStory(story)}
+                      className="w-full px-3 py-1.5 bg-background-tertiary hover:bg-primary/20 text-foreground hover:text-primary rounded-lg text-xs font-medium transition-all duration-300"
+                    >
+                      Schedule
+                    </button>
                   )}
                 </div>
               </div>
