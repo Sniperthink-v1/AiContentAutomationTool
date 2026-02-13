@@ -11,6 +11,16 @@ import { v4 as uuidv4 } from 'uuid'
 
 const execAsync = promisify(exec)
 
+// Check if FFmpeg is available
+async function isFFmpegAvailable(): Promise<boolean> {
+  try {
+    await execAsync('ffmpeg -version')
+    return true
+  } catch {
+    return false
+  }
+}
+
 // Helper to download a video from URL with retry logic and longer timeout
 async function downloadVideo(url: string, outputPath: string, maxRetries = 3): Promise<void> {
   let lastError: Error | null = null
@@ -73,6 +83,20 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         { success: false, error: 'Unauthorized' },
         { status: 401 }
+      )
+    }
+
+    // Check if FFmpeg is available (required for video processing)
+    const ffmpegAvailable = await isFFmpegAvailable()
+    if (!ffmpegAvailable) {
+      console.error('FFmpeg not available on this system')
+      return NextResponse.json(
+        { 
+          success: false, 
+          error: 'Video processing is not available on this server. FFmpeg is required.',
+          code: 'FFMPEG_NOT_AVAILABLE'
+        },
+        { status: 503 }
       )
     }
 
