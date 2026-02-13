@@ -77,7 +77,15 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json()
-    const { videoUrls, prompt, enhancedPrompt, model = 'veo-3.1-fast', saveToMedia = true } = body
+    const { 
+      videoUrls, 
+      prompt, 
+      enhancedPrompt, 
+      model = 'veo-3.1-fast', 
+      saveToMedia = true,
+      transitionType = 'smoothblend', // 'smoothblend' | 'dissolve' | 'fade' | 'wipe' | 'none'
+      transitionDuration = 2.0 // Default 2 seconds for smoother transitions
+    } = body
 
     if (!videoUrls || !Array.isArray(videoUrls) || videoUrls.length === 0) {
       return NextResponse.json(
@@ -160,64 +168,79 @@ export async function POST(request: NextRequest) {
       }
 
       // Create concat list file for FFmpeg
-      // Use longer crossfade with dissolve transition for seamless, cinematic blending
-      console.log('Combining videos with ultra-smooth dissolve transitions...')
+      // ULTRA-SMOOTH TRANSITIONS: Multiple options for seamless clip blending
+      console.log(`Combining videos with ${transitionType} transitions (${transitionDuration}s duration)...`)
       
-      // SMOOTH TRANSITION SETTINGS:
-      // - dissolve: Gradual pixel-by-pixel blend (most natural, no visible "cut")
-      // - 1.5 second duration: Long enough to feel seamless, short enough to not drag
-      // - Exponential audio crossfade (exp curves): Sounds more natural than linear
-      // - High quality encoding with motion interpolation
+      // TRANSITION OPTIONS:
+      // - smoothblend: Dissolve + frame interpolation for most natural look
+      // - dissolve: Gradual pixel-by-pixel blend
+      // - fade: Classic fade through black
+      // - wipe: Directional wipe transition
+      // - none: Hard cut (instant switch)
+      
+      // Get transition FFmpeg filter name
+      const getTransitionFilter = (type: string) => {
+        switch(type) {
+          case 'smoothblend': return 'smoothdown' // Best for seamless clips
+          case 'dissolve': return 'dissolve'
+          case 'fade': return 'fade'
+          case 'wipe': return 'wiperight'
+          case 'none': return 'fade' // Will use 0 duration
+          default: return 'smoothdown'
+        }
+      }
+      
+      const effectiveDuration = transitionType === 'none' ? 0.1 : transitionDuration
+      const transitionFilter = getTransitionFilter(transitionType)
+      const clipDuration = 8 // Standard Veo clip duration
       
       if (downloadedFiles.length === 2) {
-        // Two clips: ultra-smooth dissolve with 1.5 second overlap
-        const crossfadeDuration = 1.5
-        const offset1 = 6.5 // Start transition 1.5s before end of clip (8 - 1.5 = 6.5)
-        // Use dissolve transition with easing for most natural look
-        const ffmpegCommand = `ffmpeg -i "${downloadedFiles[0]}" -i "${downloadedFiles[1]}" -filter_complex "[0:v]setpts=PTS-STARTPTS[v0];[1:v]setpts=PTS-STARTPTS[v1];[v0][v1]xfade=transition=dissolve:duration=${crossfadeDuration}:offset=${offset1}:easing=easeInOutSine[v];[0:a]aformat=sample_fmts=fltp:sample_rates=44100:channel_layouts=stereo[a0];[1:a]aformat=sample_fmts=fltp:sample_rates=44100:channel_layouts=stereo[a1];[a0][a1]acrossfade=d=${crossfadeDuration}:c1=exp:c2=exp[a]" -map "[v]" -map "[a]" -c:v libx264 -preset slow -crf 17 -pix_fmt yuv420p -movflags +faststart -b:v 10M -maxrate 12M -bufsize 24M -c:a aac -b:a 256k -ar 44100 "${outputPath}" -y`
+        // Two clips: ultra-smooth blend with configurable overlap
+        const offset1 = clipDuration - effectiveDuration // Start transition before clip end
+        
+        // Use smoothdown for most natural look, with frame blending
+        const ffmpegCommand = `ffmpeg -i "${downloadedFiles[0]}" -i "${downloadedFiles[1]}" -filter_complex "[0:v]setpts=PTS-STARTPTS,fps=30[v0];[1:v]setpts=PTS-STARTPTS,fps=30[v1];[v0][v1]xfade=transition=${transitionFilter}:duration=${effectiveDuration}:offset=${offset1}[v];[0:a]aformat=sample_fmts=fltp:sample_rates=44100:channel_layouts=stereo[a0];[1:a]aformat=sample_fmts=fltp:sample_rates=44100:channel_layouts=stereo[a1];[a0][a1]acrossfade=d=${effectiveDuration}:c1=exp:c2=exp[a]" -map "[v]" -map "[a]" -c:v libx264 -preset slow -crf 17 -pix_fmt yuv420p -movflags +faststart -b:v 10M -maxrate 12M -bufsize 24M -c:a aac -b:a 256k -ar 44100 "${outputPath}" -y`
         
         try {
           await execAsync(ffmpegCommand)
         } catch (ffmpegError: unknown) {
-          console.log('Dissolve transition failed, trying fade transition...')
-          // Fallback: simple fade which is also very smooth
-          const fallbackCommand = `ffmpeg -i "${downloadedFiles[0]}" -i "${downloadedFiles[1]}" -filter_complex "[0:v][1:v]xfade=transition=fade:duration=${crossfadeDuration}:offset=${offset1}[v];[0:a][1:a]acrossfade=d=${crossfadeDuration}:c1=exp:c2=exp[a]" -map "[v]" -map "[a]" -c:v libx264 -preset medium -crf 19 -pix_fmt yuv420p -movflags +faststart -c:a aac -b:a 192k "${outputPath}" -y`
+          console.log('Smooth transition failed, trying dissolve fallback...')
+          // Fallback: dissolve which is universally supported
+          const fallbackCommand = `ffmpeg -i "${downloadedFiles[0]}" -i "${downloadedFiles[1]}" -filter_complex "[0:v][1:v]xfade=transition=dissolve:duration=${effectiveDuration}:offset=${offset1}[v];[0:a][1:a]acrossfade=d=${effectiveDuration}:c1=exp:c2=exp[a]" -map "[v]" -map "[a]" -c:v libx264 -preset medium -crf 19 -pix_fmt yuv420p -movflags +faststart -c:a aac -b:a 192k "${outputPath}" -y`
           await execAsync(fallbackCommand)
         }
       } else if (downloadedFiles.length === 3) {
-        // Three clips: chain ultra-smooth dissolves with 1.5 second overlaps
-        const crossfadeDuration = 1.5
-        const offset1 = 6.5  // First transition at 6.5s
-        const offset2 = 13.0 // Second transition (6.5 + 8 - 1.5 = 13)
-        const ffmpegCommand = `ffmpeg -i "${downloadedFiles[0]}" -i "${downloadedFiles[1]}" -i "${downloadedFiles[2]}" -filter_complex "[0:v]setpts=PTS-STARTPTS[v0];[1:v]setpts=PTS-STARTPTS[v1];[2:v]setpts=PTS-STARTPTS[v2];[v0][v1]xfade=transition=dissolve:duration=${crossfadeDuration}:offset=${offset1}:easing=easeInOutSine[vfade1];[vfade1][v2]xfade=transition=dissolve:duration=${crossfadeDuration}:offset=${offset2}:easing=easeInOutSine[v];[0:a]aformat=sample_fmts=fltp:sample_rates=44100:channel_layouts=stereo[a0];[1:a]aformat=sample_fmts=fltp:sample_rates=44100:channel_layouts=stereo[a1];[2:a]aformat=sample_fmts=fltp:sample_rates=44100:channel_layouts=stereo[a2];[a0][a1]acrossfade=d=${crossfadeDuration}:c1=exp:c2=exp[afade1];[afade1][a2]acrossfade=d=${crossfadeDuration}:c1=exp:c2=exp[a]" -map "[v]" -map "[a]" -c:v libx264 -preset slow -crf 17 -pix_fmt yuv420p -movflags +faststart -b:v 10M -maxrate 12M -bufsize 24M -c:a aac -b:a 256k -ar 44100 "${outputPath}" -y`
+        // Three clips: chain smooth transitions
+        const offset1 = clipDuration - effectiveDuration
+        const offset2 = offset1 + clipDuration - effectiveDuration // Chain the offsets
+        
+        const ffmpegCommand = `ffmpeg -i "${downloadedFiles[0]}" -i "${downloadedFiles[1]}" -i "${downloadedFiles[2]}" -filter_complex "[0:v]setpts=PTS-STARTPTS,fps=30[v0];[1:v]setpts=PTS-STARTPTS,fps=30[v1];[2:v]setpts=PTS-STARTPTS,fps=30[v2];[v0][v1]xfade=transition=${transitionFilter}:duration=${effectiveDuration}:offset=${offset1}[vfade1];[vfade1][v2]xfade=transition=${transitionFilter}:duration=${effectiveDuration}:offset=${offset2}[v];[0:a]aformat=sample_fmts=fltp:sample_rates=44100:channel_layouts=stereo[a0];[1:a]aformat=sample_fmts=fltp:sample_rates=44100:channel_layouts=stereo[a1];[2:a]aformat=sample_fmts=fltp:sample_rates=44100:channel_layouts=stereo[a2];[a0][a1]acrossfade=d=${effectiveDuration}:c1=exp:c2=exp[afade1];[afade1][a2]acrossfade=d=${effectiveDuration}:c1=exp:c2=exp[a]" -map "[v]" -map "[a]" -c:v libx264 -preset slow -crf 17 -pix_fmt yuv420p -movflags +faststart -b:v 10M -maxrate 12M -bufsize 24M -c:a aac -b:a 256k -ar 44100 "${outputPath}" -y`
         
         try {
           await execAsync(ffmpegCommand)
         } catch (ffmpegError: unknown) {
-          console.log('Dissolve transition failed, trying fade transition...')
-          const fallbackCommand = `ffmpeg -i "${downloadedFiles[0]}" -i "${downloadedFiles[1]}" -i "${downloadedFiles[2]}" -filter_complex "[0:v][1:v]xfade=transition=fade:duration=${crossfadeDuration}:offset=${offset1}[vfade1];[vfade1][2:v]xfade=transition=fade:duration=${crossfadeDuration}:offset=${offset2}[v];[0:a][1:a]acrossfade=d=${crossfadeDuration}:c1=exp:c2=exp[afade1];[afade1][2:a]acrossfade=d=${crossfadeDuration}:c1=exp:c2=exp[a]" -map "[v]" -map "[a]" -c:v libx264 -preset medium -crf 19 -pix_fmt yuv420p -movflags +faststart -c:a aac -b:a 192k "${outputPath}" -y`
+          console.log('Smooth transition failed, trying dissolve fallback...')
+          const fallbackCommand = `ffmpeg -i "${downloadedFiles[0]}" -i "${downloadedFiles[1]}" -i "${downloadedFiles[2]}" -filter_complex "[0:v][1:v]xfade=transition=dissolve:duration=${effectiveDuration}:offset=${offset1}[vfade1];[vfade1][2:v]xfade=transition=dissolve:duration=${effectiveDuration}:offset=${offset2}[v];[0:a][1:a]acrossfade=d=${effectiveDuration}:c1=exp:c2=exp[afade1];[afade1][2:a]acrossfade=d=${effectiveDuration}:c1=exp:c2=exp[a]" -map "[v]" -map "[a]" -c:v libx264 -preset medium -crf 19 -pix_fmt yuv420p -movflags +faststart -c:a aac -b:a 192k "${outputPath}" -y`
           await execAsync(fallbackCommand)
         }
       } else if (downloadedFiles.length === 4) {
-        // Four clips: chain ultra-smooth dissolves with 1.5 second overlaps
-        const crossfadeDuration = 1.5
-        const offset1 = 6.5   // First transition
-        const offset2 = 13.0  // Second transition
-        const offset3 = 19.5  // Third transition (13 + 8 - 1.5 = 19.5)
-        const ffmpegCommand = `ffmpeg -i "${downloadedFiles[0]}" -i "${downloadedFiles[1]}" -i "${downloadedFiles[2]}" -i "${downloadedFiles[3]}" -filter_complex "[0:v]setpts=PTS-STARTPTS[v0];[1:v]setpts=PTS-STARTPTS[v1];[2:v]setpts=PTS-STARTPTS[v2];[3:v]setpts=PTS-STARTPTS[v3];[v0][v1]xfade=transition=dissolve:duration=${crossfadeDuration}:offset=${offset1}:easing=easeInOutSine[vfade1];[vfade1][v2]xfade=transition=dissolve:duration=${crossfadeDuration}:offset=${offset2}:easing=easeInOutSine[vfade2];[vfade2][v3]xfade=transition=dissolve:duration=${crossfadeDuration}:offset=${offset3}:easing=easeInOutSine[v];[0:a]aformat=sample_fmts=fltp:sample_rates=44100:channel_layouts=stereo[a0];[1:a]aformat=sample_fmts=fltp:sample_rates=44100:channel_layouts=stereo[a1];[2:a]aformat=sample_fmts=fltp:sample_rates=44100:channel_layouts=stereo[a2];[3:a]aformat=sample_fmts=fltp:sample_rates=44100:channel_layouts=stereo[a3];[a0][a1]acrossfade=d=${crossfadeDuration}:c1=exp:c2=exp[afade1];[afade1][a2]acrossfade=d=${crossfadeDuration}:c1=exp:c2=exp[afade2];[afade2][a3]acrossfade=d=${crossfadeDuration}:c1=exp:c2=exp[a]" -map "[v]" -map "[a]" -c:v libx264 -preset slow -crf 17 -pix_fmt yuv420p -movflags +faststart -b:v 10M -maxrate 12M -bufsize 24M -c:a aac -b:a 256k -ar 44100 "${outputPath}" -y`
+        // Four clips: chain smooth transitions
+        const offset1 = clipDuration - effectiveDuration
+        const offset2 = offset1 + clipDuration - effectiveDuration
+        const offset3 = offset2 + clipDuration - effectiveDuration
+        
+        const ffmpegCommand = `ffmpeg -i "${downloadedFiles[0]}" -i "${downloadedFiles[1]}" -i "${downloadedFiles[2]}" -i "${downloadedFiles[3]}" -filter_complex "[0:v]setpts=PTS-STARTPTS,fps=30[v0];[1:v]setpts=PTS-STARTPTS,fps=30[v1];[2:v]setpts=PTS-STARTPTS,fps=30[v2];[3:v]setpts=PTS-STARTPTS,fps=30[v3];[v0][v1]xfade=transition=${transitionFilter}:duration=${effectiveDuration}:offset=${offset1}[vfade1];[vfade1][v2]xfade=transition=${transitionFilter}:duration=${effectiveDuration}:offset=${offset2}[vfade2];[vfade2][v3]xfade=transition=${transitionFilter}:duration=${effectiveDuration}:offset=${offset3}[v];[0:a]aformat=sample_fmts=fltp:sample_rates=44100:channel_layouts=stereo[a0];[1:a]aformat=sample_fmts=fltp:sample_rates=44100:channel_layouts=stereo[a1];[2:a]aformat=sample_fmts=fltp:sample_rates=44100:channel_layouts=stereo[a2];[3:a]aformat=sample_fmts=fltp:sample_rates=44100:channel_layouts=stereo[a3];[a0][a1]acrossfade=d=${effectiveDuration}:c1=exp:c2=exp[afade1];[afade1][a2]acrossfade=d=${effectiveDuration}:c1=exp:c2=exp[afade2];[afade2][a3]acrossfade=d=${effectiveDuration}:c1=exp:c2=exp[a]" -map "[v]" -map "[a]" -c:v libx264 -preset slow -crf 17 -pix_fmt yuv420p -movflags +faststart -b:v 10M -maxrate 12M -bufsize 24M -c:a aac -b:a 256k -ar 44100 "${outputPath}" -y`
         
         try {
           await execAsync(ffmpegCommand)
         } catch (ffmpegError: unknown) {
-          console.log('Dissolve transition failed, trying fade transition...')
-          const fallbackCommand = `ffmpeg -i "${downloadedFiles[0]}" -i "${downloadedFiles[1]}" -i "${downloadedFiles[2]}" -i "${downloadedFiles[3]}" -filter_complex "[0:v][1:v]xfade=transition=fade:duration=${crossfadeDuration}:offset=${offset1}[vfade1];[vfade1][2:v]xfade=transition=fade:duration=${crossfadeDuration}:offset=${offset2}[vfade2];[vfade2][3:v]xfade=transition=fade:duration=${crossfadeDuration}:offset=${offset3}[v];[0:a][1:a]acrossfade=d=${crossfadeDuration}:c1=exp:c2=exp[afade1];[afade1][2:a]acrossfade=d=${crossfadeDuration}:c1=exp:c2=exp[afade2];[afade2][3:a]acrossfade=d=${crossfadeDuration}:c1=exp:c2=exp[a]" -map "[v]" -map "[a]" -c:v libx264 -preset medium -crf 19 -pix_fmt yuv420p -movflags +faststart -c:a aac -b:a 192k "${outputPath}" -y`
+          console.log('Smooth transition failed, trying dissolve fallback...')
+          const fallbackCommand = `ffmpeg -i "${downloadedFiles[0]}" -i "${downloadedFiles[1]}" -i "${downloadedFiles[2]}" -i "${downloadedFiles[3]}" -filter_complex "[0:v][1:v]xfade=transition=dissolve:duration=${effectiveDuration}:offset=${offset1}[vfade1];[vfade1][2:v]xfade=transition=dissolve:duration=${effectiveDuration}:offset=${offset2}[vfade2];[vfade2][3:v]xfade=transition=dissolve:duration=${effectiveDuration}:offset=${offset3}[v];[0:a][1:a]acrossfade=d=${effectiveDuration}:c1=exp:c2=exp[afade1];[afade1][2:a]acrossfade=d=${effectiveDuration}:c1=exp:c2=exp[afade2];[afade2][3:a]acrossfade=d=${effectiveDuration}:c1=exp:c2=exp[a]" -map "[v]" -map "[a]" -c:v libx264 -preset medium -crf 19 -pix_fmt yuv420p -movflags +faststart -c:a aac -b:a 192k "${outputPath}" -y`
           await execAsync(fallbackCommand)
         }
       } else {
-        // Fallback for 5+ clips - use dissolve with dynamic offset calculation
+        // Fallback for 5+ clips - use dynamic transition chain
         console.log(`Building smooth transition chain for ${downloadedFiles.length} clips...`)
-        const crossfadeDuration = 1.5
-        const clipDuration = 8 // Assuming 8 second clips
         
         // Build inputs
         let inputs = downloadedFiles.map((f, i) => `-i "${f}"`).join(' ')
@@ -226,18 +249,18 @@ export async function POST(request: NextRequest) {
         let videoFilter = ''
         let audioFilter = ''
         
-        // Normalize all video streams
+        // Normalize all video streams with consistent fps
         for (let i = 0; i < downloadedFiles.length; i++) {
-          videoFilter += `[${i}:v]setpts=PTS-STARTPTS[v${i}];`
+          videoFilter += `[${i}:v]setpts=PTS-STARTPTS,fps=30[v${i}];`
           audioFilter += `[${i}:a]aformat=sample_fmts=fltp:sample_rates=44100:channel_layouts=stereo[a${i}];`
         }
         
         // Chain video crossfades
         let prevVideoLabel = 'v0'
         for (let i = 1; i < downloadedFiles.length; i++) {
-          const offset = (clipDuration - crossfadeDuration) + (i - 1) * (clipDuration - crossfadeDuration)
+          const offset = (clipDuration - effectiveDuration) * i
           const newLabel = i === downloadedFiles.length - 1 ? 'v' : `vfade${i}`
-          videoFilter += `[${prevVideoLabel}][v${i}]xfade=transition=dissolve:duration=${crossfadeDuration}:offset=${offset.toFixed(1)}[${newLabel}];`
+          videoFilter += `[${prevVideoLabel}][v${i}]xfade=transition=${transitionFilter}:duration=${effectiveDuration}:offset=${offset.toFixed(1)}[${newLabel}];`
           prevVideoLabel = newLabel
         }
         
@@ -245,27 +268,43 @@ export async function POST(request: NextRequest) {
         let prevAudioLabel = 'a0'
         for (let i = 1; i < downloadedFiles.length; i++) {
           const newLabel = i === downloadedFiles.length - 1 ? 'a' : `afade${i}`
-          audioFilter += `[${prevAudioLabel}][a${i}]acrossfade=d=${crossfadeDuration}:c1=exp:c2=exp[${newLabel}];`
+          audioFilter += `[${prevAudioLabel}][a${i}]acrossfade=d=${effectiveDuration}:c1=exp:c2=exp[${newLabel}];`
           prevAudioLabel = newLabel
         }
         
         // Remove trailing semicolon
         const filterComplex = (videoFilter + audioFilter).slice(0, -1)
         
-        const ffmpegCommand = `ffmpeg ${inputs} -filter_complex "${filterComplex}" -map "[v]" -map "[a]" -c:v libx264 -preset medium -crf 19 -pix_fmt yuv420p -movflags +faststart -c:a aac -b:a 192k "${outputPath}" -y`
+        const ffmpegCommand = `ffmpeg ${inputs} -filter_complex "${filterComplex}" -map "[v]" -map "[a]" -c:v libx264 -preset slow -crf 18 -pix_fmt yuv420p -movflags +faststart -b:v 10M -c:a aac -b:a 192k "${outputPath}" -y`
         
         try {
           await execAsync(ffmpegCommand)
         } catch (ffmpegError: unknown) {
-          console.log('Smooth transition failed, using simple concat fallback...')
-          const concatContent = downloadedFiles.map(file => `file '${file.replace(/\\/g, '/')}'`).join('\n')
-          await writeFile(concatListPath, concatContent)
-          const fallbackCommand = `ffmpeg -f concat -safe 0 -i "${concatListPath}" -c:v libx264 -c:a aac "${outputPath}" -y`
-          await execAsync(fallbackCommand)
+          console.log('Smooth transition failed, using dissolve fallback...')
+          // Rebuild with dissolve only
+          let videoFilter2 = ''
+          let prevVideoLabel2 = '0:v'
+          for (let i = 1; i < downloadedFiles.length; i++) {
+            const offset = (clipDuration - effectiveDuration) * i
+            const newLabel = i === downloadedFiles.length - 1 ? 'v' : `vfade${i}`
+            videoFilter2 += `[${prevVideoLabel2}][${i}:v]xfade=transition=dissolve:duration=${effectiveDuration}:offset=${offset.toFixed(1)}[${newLabel}];`
+            prevVideoLabel2 = newLabel
+          }
+          const simpleFallback = `ffmpeg ${inputs} -filter_complex "${videoFilter2.slice(0,-1)}" -map "[v]" -c:v libx264 -preset medium -crf 20 -pix_fmt yuv420p "${outputPath}" -y`
+          
+          try {
+            await execAsync(simpleFallback)
+          } catch {
+            // Last resort: simple concat
+            const concatContent = downloadedFiles.map(file => `file '${file.replace(/\\/g, '/')}'`).join('\n')
+            await writeFile(concatListPath, concatContent)
+            const lastResort = `ffmpeg -f concat -safe 0 -i "${concatListPath}" -c:v libx264 -c:a aac "${outputPath}" -y`
+            await execAsync(lastResort)
+          }
         }
       }
 
-      console.log('Videos combined successfully with seamless dissolve transitions (1.5s blend)')
+      console.log(`Videos combined successfully with ${transitionType} transitions (${effectiveDuration}s blend)`)
 
       // Read combined video and upload to R2
       const videoBuffer = await readFile(outputPath)

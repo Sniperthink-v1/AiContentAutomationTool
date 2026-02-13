@@ -40,7 +40,7 @@ export async function POST(request: NextRequest) {
     // Check if API key exists
     if (!process.env.GEMINI_API_KEY) {
       return NextResponse.json(
-        { error: 'Gemini API key not configured' },
+        { error: 'Gemini API key not configured. Add GEMINI_API_KEY to .env.local' },
         { status: 500 }
       )
     }
@@ -48,8 +48,9 @@ export async function POST(request: NextRequest) {
     // Initialize Gemini AI
     const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY)
     
-    // Try multiple models with retry logic (available models as of 2026)
-    const models = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-2.5-pro']
+    // Try multiple models with retry logic (stable models for 2026)
+    // Using flash models first (faster, cheaper), then pro as fallback
+    const models = ['gemini-2.0-flash', 'gemini-2.0-flash-exp', 'gemini-1.5-pro-latest']
     let lastError: any = null
     let enhancedScript = ''
     let clips: string[] = []
@@ -503,6 +504,15 @@ Now enhance the user's video idea following these guidelines. Output ONE complet
         } catch (error: any) {
           lastError = error
           
+          // API key leaked or invalid - stop immediately
+          if (error.message?.includes('leaked') || error.message?.includes('API key not valid')) {
+            console.error('Gemini API key issue:', error.message)
+            return NextResponse.json(
+              { error: 'Gemini API key is invalid or has been revoked. Please generate a new API key at https://aistudio.google.com/apikey and update GEMINI_API_KEY in .env.local' },
+              { status: 403 }
+            )
+          }
+          
           // If not overloaded error, try next model
           if (!error.message?.includes('overloaded') && error.status !== 503) {
             break // Try next model
@@ -643,6 +653,17 @@ Now enhance the user's video idea following these guidelines. Output ONE complet
           message: 'Quota exceeded'
         },
         { status: 429 }
+      )
+    }
+
+    // Check if API key is leaked or invalid
+    if (error.message?.includes('leaked') || error.message?.includes('API key not valid') || error.status === 403) {
+      return NextResponse.json(
+        { 
+          error: 'Your Gemini API key is invalid or has been revoked. Please generate a new key at https://aistudio.google.com/apikey',
+          message: 'API key invalid'
+        },
+        { status: 403 }
       )
     }
     

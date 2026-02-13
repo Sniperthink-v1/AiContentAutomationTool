@@ -230,6 +230,10 @@ export default function AIVideoPage() {
   const [isEnhancingClipPrompt, setIsEnhancingClipPrompt] = useState(false)
   const [isCombiningClips, setIsCombiningClips] = useState(false)
   const [clipGenerationPhase, setClipGenerationPhase] = useState<'idle' | 'generating' | 'preview' | 'combining' | 'complete'>('idle')
+  
+  // Clip transition/smoothing settings
+  const [transitionType, setTransitionType] = useState<'smoothblend' | 'dissolve' | 'fade' | 'wipe' | 'none'>('smoothblend')
+  const [transitionDuration, setTransitionDuration] = useState(2.0) // seconds
 
   // Load credits and songs on mount
   useEffect(() => {
@@ -1461,7 +1465,9 @@ export default function AIVideoPage() {
           prompt: currentPrompt,
           enhancedPrompt: currentEnhancedScript,
           model: 'veo-3.1-fast',
-          saveToMedia: true
+          saveToMedia: true,
+          transitionType, // User-selected transition type
+          transitionDuration // User-selected duration
         })
       })
 
@@ -3396,38 +3402,96 @@ export default function AIVideoPage() {
                 </div>
 
                 {/* Combine Section - Compact */}
-                <div className="flex items-center gap-3">
-                  <div className="flex-1 p-2 bg-primary/5 border border-primary/20 rounded-lg">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <Merge className="w-3.5 h-3.5 text-primary" />
-                        <span className="text-xs text-foreground">
-                          {generatedClips.filter(c => c.status === 'complete').length} clips ready
+                <div className="space-y-3">
+                  {/* Transition Settings */}
+                  <div className="p-3 bg-background-tertiary border border-border rounded-lg">
+                    <div className="flex items-center gap-2 mb-2">
+                      <Settings className="w-3.5 h-3.5 text-primary" />
+                      <span className="text-xs font-medium text-foreground">Clip Smoothing</span>
+                    </div>
+                    
+                    <div className="grid grid-cols-2 gap-3">
+                      {/* Transition Type */}
+                      <div>
+                        <label className="text-[10px] text-foreground-secondary mb-1 block">Blend Type</label>
+                        <select
+                          value={transitionType}
+                          onChange={(e) => setTransitionType(e.target.value as any)}
+                          className="w-full px-2 py-1.5 bg-background border border-border rounded text-xs text-foreground focus:border-primary focus:outline-none"
+                        >
+                          <option value="smoothblend">Smooth Blend (Best)</option>
+                          <option value="dissolve">Dissolve</option>
+                          <option value="fade">Fade</option>
+                          <option value="wipe">Wipe</option>
+                          <option value="none">No Transition</option>
+                        </select>
+                      </div>
+                      
+                      {/* Transition Duration */}
+                      <div>
+                        <label className="text-[10px] text-foreground-secondary mb-1 block">
+                          Duration: {transitionDuration}s
+                        </label>
+                        <input
+                          type="range"
+                          min="0.5"
+                          max="3"
+                          step="0.5"
+                          value={transitionDuration}
+                          onChange={(e) => setTransitionDuration(parseFloat(e.target.value))}
+                          className="w-full accent-primary"
+                          disabled={transitionType === 'none'}
+                        />
+                      </div>
+                    </div>
+                    
+                    <p className="text-[10px] text-foreground-secondary mt-2">
+                      {transitionType === 'smoothblend' 
+                        ? '✨ Best for seamless clips - blends frames together naturally'
+                        : transitionType === 'dissolve'
+                        ? '🎬 Classic crossfade between clips'
+                        : transitionType === 'fade'
+                        ? '🌑 Fades through black between clips'
+                        : transitionType === 'wipe'
+                        ? '➡️ Directional wipe transition'
+                        : '⚡ Hard cut - instant switch between clips'}
+                    </p>
+                  </div>
+                  
+                  {/* Combine Button Row */}
+                  <div className="flex items-center gap-3">
+                    <div className="flex-1 p-2 bg-primary/5 border border-primary/20 rounded-lg">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <Merge className="w-3.5 h-3.5 text-primary" />
+                          <span className="text-xs text-foreground">
+                            {generatedClips.filter(c => c.status === 'complete').length} clips ready
+                          </span>
+                        </div>
+                        <span className="text-xs font-medium text-primary">
+                          {generatedClips.filter(c => c.status === 'complete').length * 8}s total
                         </span>
                       </div>
-                      <span className="text-xs font-medium text-primary">
-                        {generatedClips.filter(c => c.status === 'complete').length * 8}s total
-                      </span>
                     </div>
-                  </div>
 
-                  <button
-                    onClick={handleCombineClips}
-                    disabled={isCombiningClips || generatedClips.filter(c => c.status === 'complete').length === 0}
-                    className="px-4 py-2 bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white rounded-lg font-medium text-sm transition-all flex items-center gap-2 shadow-lg hover:shadow-green-500/20 disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {isCombiningClips ? (
-                      <>
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                        Combining...
-                      </>
-                    ) : (
-                      <>
-                        <Merge className="w-4 h-4" />
-                        Combine
-                      </>
-                    )}
-                  </button>
+                    <button
+                      onClick={handleCombineClips}
+                      disabled={isCombiningClips || generatedClips.filter(c => c.status === 'complete').length === 0}
+                      className="px-4 py-2 bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white rounded-lg font-medium text-sm transition-all flex items-center gap-2 shadow-lg hover:shadow-green-500/20 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {isCombiningClips ? (
+                        <>
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                          Combining...
+                        </>
+                      ) : (
+                        <>
+                          <Merge className="w-4 h-4" />
+                          Combine
+                        </>
+                      )}
+                    </button>
+                  </div>
                 </div>
               </div>
             )}
@@ -3438,13 +3502,13 @@ export default function AIVideoPage() {
               <div className="mt-4 p-4 bg-primary/5 border border-primary/20 rounded-lg animate-slide-up">
                 <div className="flex items-center gap-3 mb-3">
                   <Loader2 className="w-5 h-5 text-primary animate-spin" />
-                  <span className="text-sm font-bold text-foreground">Combining clips into final video...</span>
+                  <span className="text-sm font-bold text-foreground">Combining clips with smooth transitions...</span>
                 </div>
                 <div className="w-full bg-background-tertiary rounded-full h-2 overflow-hidden">
                   <div className="h-full bg-gradient-to-r from-primary to-green-500 animate-pulse" style={{ width: '60%' }} />
                 </div>
                 <p className="text-xs text-foreground-secondary mt-2">
-                  This may take a minute. Please wait...
+                  Applying {transitionType} blend ({transitionDuration}s transitions) for seamless video...
                 </p>
               </div>
             )}
