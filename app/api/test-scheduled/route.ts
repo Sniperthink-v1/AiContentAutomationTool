@@ -1,19 +1,29 @@
 import { NextRequest, NextResponse } from 'next/server'
 import pool from '@/lib/db'
+import { getAuthUser } from '@/lib/middleware'
 
 export async function GET(request: NextRequest) {
   try {
+    // Require authentication to view scheduled posts
+    const user = await getAuthUser(request)
+    if (!user) {
+      return NextResponse.json(
+        { success: false, error: 'Unauthorized' },
+        { status: 401 }
+      )
+    }
+
     const now = new Date().toISOString()
     
-    // Get scheduled posts
+    // Get scheduled posts ONLY for the authenticated user
     const result = await pool.query(
       `SELECT d.id, d.original_prompt, d.scheduled_date, d.status, d.user_id,
               si.access_token, si.platform_user_id
        FROM drafts d
        LEFT JOIN social_integrations si ON d.user_id = si.user_id AND si.platform = 'instagram'
-       WHERE d.status = 'scheduled'
+       WHERE d.status = 'scheduled' AND d.user_id = $1
        ORDER BY d.scheduled_date ASC`,
-      []
+      [user.id]
     )
 
     const scheduled = result.rows.map(row => ({

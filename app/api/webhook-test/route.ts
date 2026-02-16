@@ -1,9 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server';
 import pool from '@/lib/db';
+import { getAuthUser } from '@/lib/middleware';
 
 // Test endpoint to check webhook status and recent webhook calls
+// Requires authentication to prevent information disclosure
 export async function GET(request: NextRequest) {
   try {
+    // Require authentication
+    const user = await getAuthUser(request);
+    if (!user) {
+      return NextResponse.json(
+        { success: false, error: 'Unauthorized' },
+        { status: 401 }
+      );
+    }
+
     // Check if webhook tables exist
     const tableCheck = await pool.query(`
       SELECT EXISTS (

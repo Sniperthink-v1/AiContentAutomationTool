@@ -31,6 +31,7 @@ import {
   Mic
 } from 'lucide-react'
 import { useToast } from '@/lib/components/Toast'
+import { VoiceInput } from '@/lib/components/VoiceInput'
 
 // Video Viewer Modal Component
 function VideoViewerModal({ isOpen, onClose, videoUrl, prompt }: { isOpen: boolean, onClose: () => void, videoUrl: string, prompt: string }) {
@@ -2670,13 +2671,19 @@ export default function AIVideoPage() {
                   <label className="block text-sm font-medium text-foreground">
                     Custom Enhancement Instructions (Optional)
                   </label>
-                  <textarea
-                    value={customEnhanceInstructions}
-                    onChange={(e) => setCustomEnhanceInstructions(e.target.value)}
-                    placeholder="e.g., 'Add dramatic slow-motion effects' or 'Make it energetic with fast cuts' or 'Include sunset golden hour lighting'"
-                    className="w-full px-4 py-3 bg-background border border-border rounded-lg text-foreground placeholder-foreground-secondary resize-none focus:outline-none focus:ring-2 focus:ring-primary"
-                    rows={3}
-                  />
+                  <div className="relative">
+                    <textarea
+                      value={customEnhanceInstructions}
+                      onChange={(e) => setCustomEnhanceInstructions(e.target.value)}
+                      placeholder="e.g., 'Add dramatic slow-motion effects' or 'Make it energetic with fast cuts' or 'Include sunset golden hour lighting'"
+                      className="w-full px-4 py-3 pr-12 bg-background border border-border rounded-lg text-foreground placeholder-foreground-secondary resize-none focus:outline-none focus:ring-2 focus:ring-primary"
+                      rows={3}
+                    />
+                    <VoiceInput
+                      onTranscription={(text) => setCustomEnhanceInstructions(prev => prev ? `${prev} ${text}` : text)}
+                      className="absolute right-3 top-3"
+                    />
+                  </div>
                   <p className="text-xs text-foreground-secondary">
                     Describe how you want to enhance your video prompt. Leave empty for standard AI enhancement.
                   </p>
@@ -2699,16 +2706,22 @@ export default function AIVideoPage() {
                   </button>
                 </div>
               )}
-              <textarea
-                value={prompt}
-                onChange={(e) => setPrompt(e.target.value)}
-                placeholder={selectedModel === 'veo3.1_fast' 
-                  ? veoVideoStyle === 'dialogue' 
-                    ? `Describe your ${selectedDuration}s video with dialogue... e.g., "John walks into the office. John: 'Good morning everyone!' Sarah: 'Hey John, ready for the meeting?'"`
-                    : `Describe your ${selectedDuration}s video in detail... Include actions, descriptions, settings, and any dialogue`
-                  : "Describe the video you want to create... e.g., 'A modern product showcase with smooth transitions'"}
-                className="input-field h-32 resize-none"
-              />
+              <div className="relative">
+                <textarea
+                  value={prompt}
+                  onChange={(e) => setPrompt(e.target.value)}
+                  placeholder={selectedModel === 'veo3.1_fast' 
+                    ? veoVideoStyle === 'dialogue' 
+                      ? `Describe your ${selectedDuration}s video with dialogue... e.g., "John walks into the office. John: 'Good morning everyone!' Sarah: 'Hey John, ready for the meeting?'"`
+                      : `Describe your ${selectedDuration}s video in detail... Include actions, descriptions, settings, and any dialogue`
+                    : "Describe the video you want to create... e.g., 'A modern product showcase with smooth transitions'"}
+                  className="input-field h-32 resize-none pr-12"
+                />
+                <VoiceInput
+                  onTranscription={(text) => setPrompt(prev => prev ? `${prev} ${text}` : text)}
+                  className="absolute right-3 top-3"
+                />
+              </div>
               <p className="text-xs text-foreground-secondary">
                 {selectedModel === 'veo3.1_fast' 
                   ? veoVideoStyle === 'dialogue'

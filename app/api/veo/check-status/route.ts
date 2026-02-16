@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { getAuthUser } from '@/lib/middleware'
 
 // Mock video generation status checker
 // Replace with actual Veo API status endpoint when available
@@ -17,6 +18,15 @@ const mockGenerationStatus: Record<string, VideoStatus> = {}
 
 export async function GET(request: NextRequest) {
   try {
+    // Require authentication
+    const user = await getAuthUser(request)
+    if (!user) {
+      return NextResponse.json(
+        { success: false, error: 'Unauthorized' },
+        { status: 401 }
+      )
+    }
+
     const searchParams = request.nextUrl.searchParams
     const jobId = searchParams.get('jobId')
 

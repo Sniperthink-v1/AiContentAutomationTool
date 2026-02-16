@@ -8,12 +8,18 @@ import { postStory } from '@/lib/instagram'
 
 export async function GET(request: NextRequest) {
   try {
-    // Verify cron secret (optional but recommended for security)
+    // Verify cron secret for security
     const authHeader = request.headers.get('authorization')
     const cronSecret = process.env.CRON_SECRET
-
-    // If CRON_SECRET is set, verify it
-    if (cronSecret && authHeader !== `Bearer ${cronSecret}`) {
+    
+    // Allow access if:
+    // 1. Request comes from Vercel cron (checks x-vercel-cron header)
+    // 2. Request has valid CRON_SECRET in authorization header
+    const isVercelCron = request.headers.get('x-vercel-cron') === '1'
+    const hasValidSecret = cronSecret && authHeader === `Bearer ${cronSecret}`
+    
+    if (!isVercelCron && !hasValidSecret) {
+      console.log('⚠️ Unauthorized publish-stories cron attempt')
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 

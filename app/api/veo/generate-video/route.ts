@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { getAuthUser } from '@/lib/middleware'
 
 // Mock Veo API - Replace with actual Veo implementation when available
 // Google Veo is currently in limited preview, so this is a placeholder
@@ -15,6 +16,15 @@ interface VeoGenerationRequest {
 // Simulated video generation (replace with real Veo API)
 export async function POST(request: NextRequest) {
   try {
+    // Require authentication
+    const user = await getAuthUser(request)
+    if (!user) {
+      return NextResponse.json(
+        { success: false, error: 'Unauthorized' },
+        { status: 401 }
+      )
+    }
+
     const { script, settings }: VeoGenerationRequest = await request.json()
 
     if (!script) {

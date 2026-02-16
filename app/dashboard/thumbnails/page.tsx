@@ -19,6 +19,7 @@ import {
   ZoomIn
 } from 'lucide-react'
 import { useToast } from '@/lib/components/Toast'
+import { VoiceInput } from '@/lib/components/VoiceInput'
 
 type ThumbnailStyle = 'vibrant' | 'minimal' | 'professional' | 'bold' | 'elegant' | 'modern' | 'gaming' | 'cinematic'
 type GenerationMode = 'text-to-thumbnail' | 'image-to-thumbnail'
@@ -441,13 +442,19 @@ export default function ThumbnailGeneratorPage() {
                 <Sparkles className="w-5 h-5 text-primary" />
                 Custom Prompt (Optional)
               </h3>
-              <textarea
-                value={customPrompt}
-                onChange={(e) => setCustomPrompt(e.target.value)}
-                placeholder="Add specific instructions (e.g., 'Include a surprised face', 'Add red arrows', 'Show the product on the left')..."
-                className="w-full px-4 py-3 bg-background border border-border rounded-lg text-foreground placeholder:text-foreground-muted focus:outline-none focus:ring-2 focus:ring-primary/50 resize-none"
-                rows={3}
-              />
+              <div className="relative">
+                <textarea
+                  value={customPrompt}
+                  onChange={(e) => setCustomPrompt(e.target.value)}
+                  placeholder="Add specific instructions (e.g., 'Include a surprised face', 'Add red arrows', 'Show the product on the left')..."
+                  className="w-full px-4 py-3 pr-12 bg-background border border-border rounded-lg text-foreground placeholder:text-foreground-muted focus:outline-none focus:ring-2 focus:ring-primary/50 resize-none"
+                  rows={3}
+                />
+                <VoiceInput
+                  onTranscription={(text) => setCustomPrompt(prev => prev ? `${prev} ${text}` : text)}
+                  className="absolute right-3 top-3"
+                />
+              </div>
             </div>
 
             {/* Generate Button */}

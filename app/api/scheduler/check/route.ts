@@ -4,6 +4,24 @@ import { postImage, postVideo } from '@/lib/instagram'
 
 export async function GET(request: NextRequest) {
   try {
+    // Verify cron secret for automated cron jobs (Vercel cron or external)
+    const authHeader = request.headers.get('authorization')
+    const cronSecret = process.env.CRON_SECRET
+    
+    // Allow access if:
+    // 1. Request comes from Vercel cron (checks x-vercel-cron header)
+    // 2. Request has valid CRON_SECRET in authorization header
+    const isVercelCron = request.headers.get('x-vercel-cron') === '1'
+    const hasValidSecret = cronSecret && authHeader === `Bearer ${cronSecret}`
+    
+    if (!isVercelCron && !hasValidSecret) {
+      console.log('⚠️ Unauthorized scheduler check attempt')
+      return NextResponse.json(
+        { success: false, error: 'Unauthorized - Invalid cron secret' },
+        { status: 401 }
+      )
+    }
+
     console.log('🔍 Checking for scheduled posts...')
     const now = new Date().toISOString()
     

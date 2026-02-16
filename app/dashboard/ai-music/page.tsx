@@ -19,6 +19,7 @@ import {
   Upload
 } from 'lucide-react'
 import { useToast } from '@/lib/components/Toast'
+import { VoiceInput } from '@/lib/components/VoiceInput'
 
 // Helper function to create notifications
 const createNotification = async (title: string, message: string, type: string, link?: string) => {
@@ -478,17 +479,23 @@ export default function AIMusicPage() {
                   ({prompt.length}/{getMaxPromptLength()})
                 </span>
               </label>
-              <textarea
-                value={prompt}
-                onChange={(e) => setPrompt(e.target.value)}
-                maxLength={getMaxPromptLength()}
-                placeholder={
-                  customMode && !instrumental
-                    ? 'Enter exact lyrics or describe the music...'
-                    : 'Describe the music you want to create...'
-                }
-                className="input-field h-32 resize-none"
-              />
+              <div className="relative">
+                <textarea
+                  value={prompt}
+                  onChange={(e) => setPrompt(e.target.value)}
+                  maxLength={getMaxPromptLength()}
+                  placeholder={
+                    customMode && !instrumental
+                      ? 'Enter exact lyrics or describe the music...'
+                      : 'Describe the music you want to create...'
+                  }
+                  className="input-field h-32 resize-none pr-12"
+                />
+                <VoiceInput
+                  onTranscription={(text) => setPrompt(prev => prev ? `${prev} ${text}` : text)}
+                  className="absolute right-3 top-3"
+                />
+              </div>
             </div>
 
             {/* Custom Mode Fields */}

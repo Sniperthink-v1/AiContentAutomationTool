@@ -23,6 +23,7 @@ import {
   Send
 } from 'lucide-react'
 import { useToast } from '@/lib/components/Toast'
+import { VoiceInput } from '@/lib/components/VoiceInput'
 
 // Helper function to create notifications
 const createNotification = async (title: string, message: string, type: string, link?: string) => {
@@ -648,13 +649,19 @@ export default function AIPhotosPage() {
                 <label className="block text-sm font-medium text-foreground">
                   Custom Enhancement Instructions (Optional)
                 </label>
-                <textarea
-                  value={customEnhanceInstructions}
-                  onChange={(e) => setCustomEnhanceInstructions(e.target.value)}
-                  placeholder="e.g., 'Make it more dramatic with stormy weather' or 'Add vintage film look' or 'Focus on warm colors and sunset lighting'"
-                  className="w-full px-4 py-3 bg-background border border-border rounded-lg text-foreground placeholder-foreground-secondary resize-none focus:outline-none focus:ring-2 focus:ring-primary"
-                  rows={3}
-                />
+                <div className="relative">
+                  <textarea
+                    value={customEnhanceInstructions}
+                    onChange={(e) => setCustomEnhanceInstructions(e.target.value)}
+                    placeholder="e.g., 'Make it more dramatic with stormy weather' or 'Add vintage film look' or 'Focus on warm colors and sunset lighting'"
+                    className="w-full px-4 py-3 pr-12 bg-background border border-border rounded-lg text-foreground placeholder-foreground-secondary resize-none focus:outline-none focus:ring-2 focus:ring-primary"
+                    rows={3}
+                  />
+                  <VoiceInput
+                    onTranscription={(text) => setCustomEnhanceInstructions(prev => prev ? `${prev} ${text}` : text)}
+                    className="absolute right-3 top-3"
+                  />
+                </div>
                 <p className="text-xs text-foreground-secondary">
                   Describe how you want to enhance your prompt. Leave empty for standard AI enhancement.
                 </p>
@@ -678,16 +685,22 @@ export default function AIPhotosPage() {
               </div>
             )}
             
-            <textarea
-              value={prompt}
-              onChange={(e) => setPrompt(e.target.value)}
-              placeholder={
-                mode === 'text-to-image'
-                  ? "Describe the image you want to create... (e.g., 'A serene mountain landscape at sunset with vibrant colors')"
-                  : "Describe how you want to transform the source image... (e.g., 'Change it to a watercolor painting style', 'Make it nighttime', 'Add snow to the scene')"
-              }
-              className="w-full h-40 bg-background border border-border rounded-lg p-4 text-foreground placeholder-foreground-secondary/50 resize-none focus:outline-none focus:ring-2 focus:ring-primary/50 text-base"
-            />
+            <div className="relative">
+              <textarea
+                value={prompt}
+                onChange={(e) => setPrompt(e.target.value)}
+                placeholder={
+                  mode === 'text-to-image'
+                    ? "Describe the image you want to create... (e.g., 'A serene mountain landscape at sunset with vibrant colors')"
+                    : "Describe how you want to transform the source image... (e.g., 'Change it to a watercolor painting style', 'Make it nighttime', 'Add snow to the scene')"
+                }
+                className="w-full h-40 bg-background border border-border rounded-lg p-4 pr-12 text-foreground placeholder-foreground-secondary/50 resize-none focus:outline-none focus:ring-2 focus:ring-primary/50 text-base"
+              />
+              <VoiceInput
+                onTranscription={(text) => setPrompt(prev => prev ? `${prev} ${text}` : text)}
+                className="absolute right-3 top-3"
+              />
+            </div>
 
             {/* Source Image Upload Section (Image-to-Image mode only) */}
             {mode === 'image-to-image' && (
