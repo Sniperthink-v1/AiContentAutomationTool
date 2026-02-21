@@ -1,7 +1,12 @@
 const { GoogleGenerativeAI } = require('@google/generative-ai')
+require('dotenv').config()
 
 async function listModels() {
-  const apiKey = process.env.GEMINI_API_KEY || 'AIzaSyBoEXBWMBOUy31W6lCuAu8gcJTUOq4R69s'
+  const apiKey = process.env.GEMINI_API_KEY
+  if (!apiKey) {
+    console.error('GEMINI_API_KEY not set in environment')
+    process.exit(1)
+  }
   
   console.log('Listing available Gemini models...')
   

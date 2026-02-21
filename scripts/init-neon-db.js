@@ -1,13 +1,13 @@
 const { Client } = require('pg')
 const fs = require('fs')
 const path = require('path')
-require('dotenv').config({ path: '.env.local' })
+require('dotenv').config()
 
 async function initNeonDatabase() {
   console.log('🚀 Initializing Neon Database...\n')
 
   const client = new Client({
-    connectionString: 'postgresql://neondb_owner:npg_yw6OlNI1ZCWc@ep-hidden-cake-a45o1y5v-pooler.us-east-1.aws.neon.tech/neondb?sslmode=require',
+    connectionString: process.env.DATABASE_URL,
   })
 
   try {

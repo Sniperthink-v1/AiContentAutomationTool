@@ -1,7 +1,8 @@
 const { Pool } = require('pg')
+require('dotenv').config()
 
 const pool = new Pool({
-  connectionString: 'postgresql://neondb_owner:npg_8Je6lBcmwvAM@ep-dawn-cake-a1grp2xl-pooler.ap-southeast-1.aws.neon.tech/neondb?sslmode=require'
+  connectionString: process.env.DATABASE_URL
 })
 
 async function checkTable() {
